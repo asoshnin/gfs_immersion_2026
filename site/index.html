@@ -617,8 +617,8 @@
 </div>
 <!-- Field 3: API Key -->
 <div class="space-y-1">
-<label class="block font-medium text-text-primary" for="provider-key">API Key (Masked Password Field)</label>
-<input class="w-full h-9 px-3 rounded-md border border-border bg-canvas text-text-primary font-mono text-[12px] focus:outline-none focus:border-accent" id="provider-key" placeholder="sk-or-v1-..." type="password" onkeydown="if(event.key==='Enter'){event.preventDefault();saveKeySettings();}"/>
+<label class="block font-medium text-text-primary" for="llm-key">API Key (Masked Password Field)</label>
+<input class="w-full h-9 px-3 rounded-md border border-border bg-canvas text-text-primary font-mono text-[12px] focus:outline-none focus:border-accent" id="llm-key" placeholder="sk-or-v1-..." type="password" onkeydown="if(event.key==='Enter'){event.preventDefault();saveKeySettings();}"/>
 </div>
 <div class="text-[11px] text-text-muted" id="settings-status">Leave a field empty to keep its current value.</div>
 </div>
@@ -736,25 +736,91 @@
       applyTheme(next);
     }
 
-    // 2. BYO-KEY SETTINGS (Aligend keys: gfs_llm_key, gfs_llm_base, gfs_llm_model)
+    // 2. BYO-KEY SETTINGS — one namespace, one credential path.
+    const LLM_STORAGE = { key: 'gfs_llm_key', base: 'gfs_llm_base', model: 'gfs_llm_model', origin: 'gfs_llm_origin' };
+
+    // Legacy names are read once, folded into LLM_STORAGE, then removed so no
+    // orphaned plaintext secret survives the rename.
+    const LEGACY_STORAGE = {
+      'gfs_llm_key': LLM_STORAGE.key,
+      'gfs_llm_base': LLM_STORAGE.base,
+      'gfs_llm_model': LLM_STORAGE.model,
+      'gfs_llm_origin': LLM_STORAGE.origin,
+      'gfs_last_origin': LLM_STORAGE.origin
+    };
+    let legacyMigrationDone = false;
+
+    function migrateLegacyKeyStorage() {
+      if (legacyMigrationDone) return;
+      legacyMigrationDone = true;
+      Object.keys(LEGACY_STORAGE).forEach((legacy) => {
+        const target = LEGACY_STORAGE[legacy];
+        let value = null;
+        try { value = localStorage.getItem(legacy); } catch (e) { value = null; }
+        if (value !== null && value !== '' && target !== legacy) {
+          try { localStorage.setItem(target, value); } catch (e) {}
+        }
+        if (target !== legacy) {
+          try { localStorage.removeItem(legacy); } catch (e) {}
+        }
+      });
+    }
+
+    function providerEndpoint(base) {
+      const b = String(base || '').trim();
+      let u;
+      try { u = new URL(b); } catch (e) {
+        throw new Error('provider base URL must be absolute');
+      }
+      const loopback = (u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '[::1]');
+      if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback)) {
+        throw new Error('provider base URL must be https (http allowed for loopback only)');
+      }
+      const n = b.replace(/\/+$/, '');
+      return /\/chat\/completions$/.test(n) ? n : n + '/chat/completions';
+    }
+
+    function callProvider(cfg, body) {
+      return fetch(providerEndpoint(cfg.base), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + cfg.key,
+          'HTTP-Referer': location.origin,
+          'X-Title': 'GFS Immersion Assistant'
+        },
+        body: JSON.stringify(body),
+        signal: cfg.signal
+      });
+    }
+
+    function setKeyStatus(state) {
+      const el = document.getElementById('settings-status');
+      if (!el) return;
+      el.textContent = state === 'saved' ? 'Key saved' : 'Ready to submit';
+      el.className = 'text-[12px] text-text-muted';
+    }
+
     function initKeyStatus() {
-      const key = store.get('gfs_llm_key');
-      const url = store.get('gfs_llm_base') || 'https://openrouter.ai/api/v1';
-      const model = store.get('gfs_llm_model') || 'google/gemini-2.5-flash-lite:free';
+      migrateLegacyKeyStorage();
+      const storedKey = localStorage.getItem(LLM_STORAGE.key) || '';
+      const url = localStorage.getItem(LLM_STORAGE.base) || 'https://openrouter.ai/api/v1';
+      const model = localStorage.getItem(LLM_STORAGE.model) || 'google/gemini-2.5-flash-lite:free';
 
       const elUrl = document.getElementById('provider-url');
       const elModel = document.getElementById('provider-model');
-      const elKey = document.getElementById('provider-key');
+      const llmKey = document.getElementById('llm-key');
       if (elUrl) elUrl.value = url;
       if (elModel) elModel.value = model;
-      if (elKey && key) elKey.value = key;
+      if (llmKey) llmKey.value = '';
+      if (storedKey) setKeyStatus('saved');
 
       const pill = document.getElementById('no-key-status-pill');
       const indicator = document.getElementById('fab-key-indicator');
       const banner = document.getElementById('chat-status-banner');
       const headerModel = document.getElementById('chat-header-model');
 
-      if (key) {
+      if (storedKey) {
         if (pill) pill.classList.add('hidden');
         if (indicator) {
           indicator.classList.remove('bg-warning');
@@ -781,16 +847,16 @@
       }
       if (headerModel) headerModel.textContent = model;
       const active = document.getElementById('chat-active-model');
-      if (active) active.textContent = key ? ('Active: ' + model) : 'No provider key';
+      if (active) active.textContent = storedKey ? ('Active: ' + model) : 'No provider key';
     }
 
     function saveKeySettings() {
       const urlEl = document.getElementById('provider-url');
       const modelEl = document.getElementById('provider-model');
-      const keyEl = document.getElementById('provider-key');
+      const llmKey = document.getElementById('llm-key');
       const url = urlEl ? urlEl.value.trim() : '';
       const model = modelEl ? modelEl.value.trim() : '';
-      const key = keyEl ? keyEl.value.trim() : '';
+      const keyInput = llmKey ? llmKey.value.trim() : '';
 
       // Normalise: strip trailing slashes; reject anything that is not http(s).
       if (url && !/^https?:\/\//i.test(url)) {
@@ -802,10 +868,10 @@
         return;
       }
 
-      if (url) store.set('gfs_llm_base', url.replace(/\/+$/, ''));
-      if (model) store.set('gfs_llm_model', model);
-      if (key) store.set('gfs_llm_key', key);
-      store.set('gfs_last_origin', location.origin);
+      if (url) localStorage.setItem(LLM_STORAGE.base, url.replace(/\/+$/, ''));
+      if (model) localStorage.setItem(LLM_STORAGE.model, model);
+      if (keyInput) localStorage.setItem(LLM_STORAGE.key, keyInput);
+      localStorage.setItem(LLM_STORAGE.origin, location.origin);
 
       initKeyStatus();
       showSettingsStatus('Saved — ' + (model || 'default model') + ' is now active.', 'success');
@@ -820,9 +886,7 @@
     }
 
     function forgetKey() {
-      store.del('gfs_llm_key');
-      const el = document.getElementById('provider-key');
-      if (el) el.value = '';
+      localStorage.removeItem(LLM_STORAGE.key);
       initKeyStatus();
       closeSettingsModal();
     }
@@ -946,9 +1010,9 @@
       input.value = '';
       messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
-      const key = localStorage.getItem('gfs_llm_key');
-      const base = (localStorage.getItem('gfs_llm_base') || 'https://openrouter.ai/api/v1').trim();
-      const model = (localStorage.getItem('gfs_llm_model') || 'google/gemini-2.5-flash-lite:free').trim();
+      const key = localStorage.getItem(LLM_STORAGE.key);
+      const base = (localStorage.getItem(LLM_STORAGE.base) || 'https://openrouter.ai/api/v1').trim();
+      const model = (localStorage.getItem(LLM_STORAGE.model) || 'google/gemini-2.5-flash-lite:free').trim();
 
       const reqId = newRequestId();
       const controller = new AbortController();
@@ -1030,12 +1094,6 @@
 
         const fullSystemPrompt = 'You are an unofficial cohort companion tool. Never state or imply that you are an official Google or Antler product, and always attribute official material to its source.\n\n' + systemPrompt + '\n\nGround every claim in the excerpts above. Cite each claim with the excerpt\'s fusion_key in square brackets (e.g. [doc:655f3836#0000]) or its excerpt number (e.g. [1]). Never invent a citation or a URL. If the excerpts do not support an answer, say so instead of guessing.';
 
-        // Normalise the base URL: tolerate a trailing slash or a full endpoint.
-        const normalisedBase = base.replace(/\/+$/, '');
-        const providerUrl = /\/chat\/completions$/.test(normalisedBase)
-          ? normalisedBase
-          : normalisedBase + '/chat/completions';
-
         loadingBubble.remove();
         if (!loadingBubble.isConnected) { /* already replaced */ }
 
@@ -1062,24 +1120,14 @@
         const stopProviderTimer = withTimeout(PROVIDER_TIMEOUT_MS);
         let answer;
         try {
-          const genRes = await fetch(providerUrl, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': 'Bearer ' + key,
-              'HTTP-Referer': location.origin,
-              'X-Title': 'GFS Immersion Assistant'
-            },
-            body: JSON.stringify({
-              model: model,
-              messages: [
-                { role: 'system', content: fullSystemPrompt },
-                { role: 'user', content: query }
-              ],
-              temperature: 0.2,
-              max_tokens: 1500
-            }),
-            signal: controller.signal
+          const genRes = await callProvider({ base: base, key: key, signal: controller.signal }, {
+            model: model,
+            messages: [
+              { role: 'system', content: fullSystemPrompt },
+              { role: 'user', content: query }
+            ],
+            temperature: 0.2,
+            max_tokens: 1500
           });
           stopProviderTimer();
 
@@ -1099,7 +1147,7 @@
 
           const ct = genRes.headers.get('content-type') || '';
           if (!ct.includes('application/json')) {
-            throw new Error('The provider returned a non-JSON response — check the base URL (' + normalisedBase + ').');
+            throw new Error('The provider returned a non-JSON response — check the base URL (' + base + ').');
           }
           const genData = await genRes.json();
           answer = (genData.choices && genData.choices[0] && genData.choices[0].message && genData.choices[0].message.content) || '';
@@ -1460,10 +1508,36 @@
       });
     }
 
+    // 7. REGISTRY CATALOG — static manifest first, live endpoint as fallback.
+    async function loadCatalog() {
+      try {
+        const r = await fetch('data/catalog.json');
+        if (r.ok) return await r.json();
+      } catch (e) { /* fall through to the live endpoint */ }
+      const live = await fetch('/api/catalog');
+      if (!live.ok) throw new Error('catalog unavailable');
+      return live.json();
+    }
+
+    async function renderRegistry() {
+      try {
+        const catalog = await loadCatalog();
+        const host = document.getElementById('registry');
+        if (!host || !catalog) return;
+        const sessions = Array.isArray(catalog.sessions) ? catalog.sessions : [];
+        const registry = Array.isArray(catalog.registry) ? catalog.registry : [];
+        host.setAttribute('data-catalog-sessions', String(sessions.length));
+        host.setAttribute('data-catalog-registry', String(registry.length));
+      } catch (e) {
+        // The static registry list remains the authoritative fallback.
+      }
+    }
+
     // INITIALIZATION
     window.addEventListener('DOMContentLoaded', () => {
       initTheme();
       initKeyStatus();
+      renderRegistry();
     });
   </script>
 </body></html>
