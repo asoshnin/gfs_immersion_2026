@@ -1,0 +1,210 @@
+{
+  "program": {
+    "title": "Google for Startups Immersion EMEA 2026",
+    "subtitle": "Powered by Antler",
+    "dates": "October 22–28, 2026",
+    "organizers": [
+      "Google for Startups",
+      "Antler"
+    ],
+    "website": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion"
+  },
+  "sessions": [
+    {
+      "id": "session_01",
+      "title": "From Vibe to Code: Prototyping with Google AI Studio & Antigravity",
+      "date": "2026-10-22",
+      "speakers": [
+        "Toby Knight",
+        "Fabian Desnoes"
+      ],
+      "org": "Google",
+      "topic": "prototyping",
+      "tags": [
+        "AI Studio",
+        "Antigravity",
+        "Gemini",
+        "prototyping",
+        "IDE"
+      ],
+      "summary": "Toby Knight (Head of Customer Engineering UK/IE) and Fabian Desnoes (Customer Engineer – Startups) walk through building production applications using Google AI Studio for rapid prototyping and Antigravity for cloud-native deployment — from vibe to code in one session.",
+      "highlights": [
+        "Elephant & Goldfish mental model for agent memory",
+        "50% quota discount on Gemini 3.7/3.8 Flash",
+        "Gemini 4 Argon — new frontier class model",
+        "Startup credits usable inside Antigravity",
+        "Model Armor + SDP for GDPR health data"
+      ],
+      "on_demand_url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session1"
+    },
+    {
+      "id": "session_02",
+      "title": "Build Multi-Agent Systems with the Agent Development Kit (ADK)",
+      "date": "2026-10-23",
+      "speakers": [
+        "Mauricio Arrechea",
+        "Fabian Desnoes"
+      ],
+      "org": "Google",
+      "topic": "multi_agent_systems",
+      "tags": [
+        "ADK",
+        "multi-agent",
+        "SequentialAgent",
+        "LoopAgent",
+        "ParallelAgent",
+        "MCP",
+        "A2A",
+        "Vertex AI"
+      ],
+      "summary": "Deep dive into Google's Agent Development Kit — from single-agent prompts to complex multi-agent topologies with SequentialAgent, LoopAgent, ParallelAgent, and hierarchical patterns. Covers A2A protocol, Model Armor, and production deployment patterns.",
+      "highlights": [
+        "4 ADK topology patterns with production-ready code",
+        "LongRunningFunctionTool + SessionService for async execution",
+        "Time-travel branching for eval reproducibility",
+        "Hard token budgets via GCP spend caps + Agent Gateway limits",
+        "Burst deduplication via pixel/embedding caching",
+        "A2A: direct message passing, not shared graph context"
+      ],
+      "on_demand_url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day2-session2"
+    },
+    {
+      "id": "session_03",
+      "title": "Scale with Confidence: Deploying Serverless AI on Google Cloud",
+      "date": "2026-10-27",
+      "speakers": [
+        "Zack Akil"
+      ],
+      "org": "Google",
+      "topic": "serverless_gcp_deployment",
+      "tags": [
+        "Cloud Run",
+        "Antigravity",
+        "BigQuery",
+        "Pub/Sub",
+        "GCS",
+        "Vertex AI",
+        "Gemini",
+        "serverless"
+      ],
+      "summary": "Zack Akil (Full-Stack ML Engineer) demonstrates building and deploying a serverless document processing pipeline using Antigravity. Covers GCS → Pub/Sub → Cloud Run → BigQuery with Gemini on Vertex AI for document intelligence.",
+      "highlights": [
+        "Antigravity /grill-me: 8 structured architectural review questions",
+        "GCS → Pub/Sub → Cloud Run → BigQuery serverless pipeline",
+        "Flask + Gunicorn on Cloud Run with auto-generated deploy scripts",
+        "Extension: real Gemini OCR, DLQ, Secret Manager, Eventarc",
+        "Walkthrough artifact with pytest verification (11/11 pass)"
+      ],
+      "codelab_url": "https://codelabs.developers.google.com/build-and-deploy-gcp-with-antigravity#0"
+    },
+    {
+      "id": "session_04",
+      "title": "Decoding VC Math: Is Your AI Startup Built for Venture Scale?",
+      "date": "2026-10-28",
+      "speakers": [
+        "Adam French"
+      ],
+      "org": "Antler UK",
+      "topic": "venture_scale",
+      "tags": [
+        "VC Math",
+        "Five Lenses",
+        "Unit Economics",
+        "Pre-Seed",
+        "Antler",
+        "London Phase 2",
+        "Gross Margin"
+      ],
+      "summary": "Adam French (Partner at Antler UK, co-founder of Scalable Capital) decodes early-stage venture math, unit economics under inference token costs, the Five Lenses framework for category creation, pre-seed defensibility hierarchy, and evaluation criteria for the London Phase 2 In-Person Summit.",
+      "highlights": [
+        "The Five Lenses to Make an Idea Bigger: 10x More Places, Replace Legacy, Market Standard, 10x More Differentiated, Beat Competition",
+        "Inference Gross Margin Guardrail: targeting >= 75% gross margins for agentic SaaS workflows; avoid un-cached frontier loops",
+        "Pre-seed defensibility hierarchy: Customer Distribution > Proprietary Domain Data > Regulatory/Statutory Moats > Agent Orchestration > Prompt Wrappers",
+        "Solo-founder underwriting: Antler backs solo technical founders in exceptional cases where asymmetric execution velocity out-ships traditional 10-person teams",
+        "Mispriced markets & wedge strategy: targeting hidden operational labor pools rather than fighting over defended enterprise software line items",
+        "London Phase 2 In-Person Summit: evaluated on 4-week shipping velocity (40%), venture scale (25%), unit economics (20%), and peer engagement (15%)"
+      ],
+      "status": "VERIFIED_LIVE"
+    }
+  ],
+  "concepts": [
+    {
+      "id": "egm_mental_model",
+      "title": "The Elephant & Goldfish Mental Model",
+      "session": "session_01",
+      "summary": "Elephant = long-term document store (single source of truth spec). Goldfish = context window (current working memory). Architecture pattern for keeping agent context manageable while maintaining grounded anchors."
+    },
+    {
+      "id": "sequential_agent",
+      "title": "SequentialAgent Pattern",
+      "session": "session_02",
+      "summary": "Deterministic linear pipeline: sub-agents execute in strict list order passing shared InvocationContext. Ideal for SDLC: spec → code → test → review."
+    },
+    {
+      "id": "loop_agent",
+      "title": "LoopAgent Pattern",
+      "session": "session_02",
+      "summary": "Iterative refinement with max_iterations and tool-based escalation. Sub-agents cycle until exit_loop is invoked or max_iterations reached."
+    },
+    {
+      "id": "parallel_agent",
+      "title": "ParallelAgent Pattern",
+      "session": "session_02",
+      "summary": "Concurrent fan-out: run_async across independent research branches, downstream merger agent reads from session.state."
+    },
+    {
+      "id": "antigravity_grill_me",
+      "title": "Antigravity /grill-me Architectural Review",
+      "session": "session_03",
+      "summary": "8 structured follow-up questions covering security, processing logic, schema provisioning, failure handling, framework choice, IaC preference, and local testing before any code is generated."
+    },
+    {
+      "id": "serverless_pipeline",
+      "title": "GCS → Pub/Sub → Cloud Run → BigQuery Pipeline",
+      "session": "session_03",
+      "summary": "Canonical serverless event-driven pattern: GCS OBJECT_FINALIZE triggers Pub/Sub push to Cloud Run (Flask+Gunicorn), processor uses Gemini on Vertex AI, streams metadata to BigQuery."
+    },
+    {
+      "id": "five_lenses",
+      "title": "Five Lenses to Make an Idea Bigger",
+      "session": "session_04",
+      "summary": "Antler's VC framework: 10x more places, replace legacy, market standard, 10x more differentiated, beat competition. Used to evaluate whether a startup idea has venture-scale potential."
+    }
+  ],
+  "registry": [
+    {
+      "id": "ref_antigravity_cloud_run_codelab",
+      "title": "Build and Deploy to Google Cloud with Antigravity",
+      "url": "https://codelabs.developers.google.com/build-and-deploy-gcp-with-antigravity",
+      "category": "codelab"
+    },
+    {
+      "id": "ref_chrome_modern_web",
+      "title": "Chrome Modern Web Guidance",
+      "url": "https://developer.chrome.com/docs/modern-web-guidance",
+      "category": "standards"
+    },
+    {
+      "id": "ref_google_adk_python",
+      "title": "Google Agent Development Kit (Python)",
+      "url": "https://github.com/google/adk-python",
+      "category": "framework"
+    },
+    {
+      "id": "ref_adk_workflow_agents",
+      "title": "ADK Workflow Agents Documentation",
+      "url": "https://adk.dev/agents/workflow-agents/",
+      "category": "docs"
+    }
+  ],
+  "on_demand_recordings": [
+    {
+      "session": "Session 01",
+      "url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session1"
+    },
+    {
+      "session": "Session 02",
+      "url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day2-session2"
+    }
+  ]
+}

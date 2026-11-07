@@ -1,0 +1,38 @@
+# ── Python ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# ── Secrets / local env ─────────────────────────────────
+.env
+.env.*
+*.pem
+*.key
+
+# ── Logs & caches ───────────────────────────────────────
+*.log
+.pytest_cache/
+.mypy_cache/
+.firebase/
+.gcloud/
+
+# ── Data plane (never commit the corpus) ────────────────
+# The SQLite index carries third-party documentation full text and is rebuilt
+# locally; see README "Data". catalog.json is a small public manifest.
+data/*.sqlite
+data/*.sqlite3
+data/*.db
+data/feedback/
+data/embeddings/
+
+# ── Editor / OS ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.swp
+
+# ── Backups (must never be published) ───────────────────
+*.bak
+*.bak_*
+*.bak-*

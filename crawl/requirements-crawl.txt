@@ -1,0 +1,10 @@
+# Pinned dependencies for offline knowledge pipeline (build-plane only)
+# DO NOT include in 02_public_hub runtime image
+sqlite-vec==0.1.9
+fastembed==0.9.1
+onnxruntime==1.31.1
+readability-lxml==0.9
+playwright==1.64.1
+PyYAML==6.0.1
+httpx==0.28.1
+
