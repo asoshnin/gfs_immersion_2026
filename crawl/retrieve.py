@@ -46,6 +46,66 @@ RRF_K = 60
 # hybrid scored BELOW dense alone; weight the dense list higher.
 RRF_DENSE_WEIGHT = 3.0
 
+# TASK 1.1 — Cohort scope classifier (token matching only)
+# COHORT_SPEAKERS: extracted from defined people in cohort cohort
+COHORT_SPEAKERS = (
+    "toby", "knight", "fabian", "desnoes", "mauricio", "arrechea",
+    "zack", "akil", "adam", "french", "richard", "bazil"
+)
+# COHORT_ARTEFACTS: objects referenced from sprint materials
+COHORT_ARTEFACTS = (
+    "grill-me", "grill me", "model armor", "elephant & goldfish",
+    "elephant and goldfish", "ladder of proof", "dead-letter", "dead letter"
+)
+
+def classify_scope(query: str) -> str:
+    """Design §2 classifier — token matching, NEVER substring.
+    Returns "cohort" if any COHORT_SPEAKERS or COHORT_ARTEFACTS appear,
+    "auto" otherwise.
+    "antler" is EXCLUDED as a bare cohort marker (human decision 2026-11-08).
+    "credits", "quota", "discount", "startup", "immersion", "cohort",
+    "pricing" are also EXCLUDED.
+    """
+    lower_query = query.lower()
+    
+    # Match COHORT_SPEAKERS with word boundaries (exact tokens)
+    for speaker in COHORT_SPEAKERS:
+        # Use word boundary regex for exact token matching
+        pattern = r'\b' + re.escape(speaker) + r'\b'
+        if re.search(pattern, lower_query):
+            return "cohort"
+    
+    # Match COHORT_ARTEFACTS with word boundaries (exact tokens)
+    for artefact in COHORT_ARTEFACTS:
+        # Handle "grill me" as a multi-word exact phrase
+        if artefact == "grill me":
+            # Check for both words with word boundaries
+            if re.search(r'\bgrill\b', lower_query) and re.search(r'\bme\b', lower_query):
+                return "cohort"
+            continue
+        
+        # For other artifacts, split by spaces/dashes and check for word boundary matches
+        # This handles: "model armor", "elephant & goldfish", "elephant and goldfish",
+        # "ladder of proof", "dead-letter", "dead letter"
+        words = re.split(r'[\s&]+', artefact.lower().replace('-', ' '))
+        # Remove empty strings
+        words = [w for w in words if w]
+        
+        # Check if all words are present with word boundaries
+        all_present = True
+        for word in words:
+            if not re.search(r'\b' + re.escape(word) + r'\b', lower_query):
+                all_present = False
+                break
+        
+        if all_present:
+            return "cohort"
+    
+    return "auto"
+
+# TASK 1.2 — Calibrated threshold for gate fall-through
+SESSION_FIRST_MIN_SCORE: float = 0.05
+
 # ── Abstention (Sprint 10 / FR-1) ────────────────────────────────────
 #
 # ``answerable`` must mean "the corpus actually contains an answer", not
@@ -397,6 +457,7 @@ def dense_search_ranked_merged(
     query: str,
     limit: int,
     embedder,
+    corpus: Optional[str] = None,
 ) -> List[Tuple[str, float]]:
     """ONE dense ranking over both corpora, merged by distance (Sprint 10).
 
@@ -414,7 +475,22 @@ def dense_search_ranked_merged(
 
     Each corpus contributes up to ``limit`` candidates, mirroring the per-
     ranker candidate budget used by the lexical rankers.
+
+    Sprint 13 / SEC-3 (corpus filter on EVERY ranker): ``corpus`` restricts the
+    dense ranking to one corpus -- ``"doc"`` reads ``vec_chunks`` only,
+    ``"session"`` reads ``vec_sessions`` only, and ``None`` reproduces the
+    original cross-corpus merge byte-for-byte. Restricting the *merged dense*
+    list (not just the lexical rankers) is load-bearing: a cross-corpus dense
+    hit could otherwise still dominate a docs-only route and silently restore
+    the ranking bug this sprint fixes. No new SQL is added -- the corpus tables
+    are still chosen between the literal statements in ``dense_search_ranked``.
     """
+    if corpus is not None and corpus not in DENSE_CORPORA:
+        raise ValueError(f"Unknown corpus: {corpus!r}")
+    if corpus == "doc":
+        return dense_search_ranked(conn, query, limit, embedder, corpus="doc")
+    if corpus == "session":
+        return dense_search_ranked(conn, query, limit, embedder, corpus="session")
     merged = dense_search_ranked(conn, query, limit, embedder, corpus="doc")
     merged += dense_search_ranked(conn, query, limit, embedder, corpus="session")
     merged.sort(key=lambda pair: (pair[1], pair[0]))
@@ -614,6 +690,7 @@ def hybrid_search_ranked(
     query: str,
     top_k: int = 10,
     embedder=None,
+    corpus: Optional[str] = None,
 ) -> Tuple[List[Citation], str, Answerability]:
     """Fuse lexical + dense rankers, hydrate top ``top_k``, assess abstention.
 
@@ -625,7 +702,14 @@ def hybrid_search_ranked(
     result was fused, otherwise ``"lexical_only"``. If the embedder or vec0 is
     unavailable at request time, the dense ranker is skipped and the honest
     ``lexical_only`` mode is returned.
+
+    Sprint 13 / SEC-3 (load-bearing corpus filter): ``corpus`` is accepted in
+    ``{"doc", "session", None}`` and is applied to EVERY ranker, including the
+    merged dense list from ``dense_search_ranked_merged``. ``None`` reproduces
+    today's behaviour exactly (fuse both corpora).
     """
+    if corpus is not None and corpus not in DENSE_CORPORA:
+        raise ValueError(f"Unknown corpus: {corpus!r}")
     if not isinstance(query, str):
         raise TypeError("query must be a string")
     if len(query) > MAX_QUERY_LEN:
@@ -641,16 +725,19 @@ def hybrid_search_ranked(
 
     candidate_limit = CANDIDATE_LIMIT(top_k)
 
+    corpora: Tuple[str, ...] = (
+        (corpus,) if corpus in DENSE_CORPORA else ("doc", "session")
+    )
     rankings: List[List[str]] = [
-        lexical_search(conn, query, candidate_limit, corpus="doc"),
-        lexical_search(conn, query, candidate_limit, corpus="session"),
+        lexical_search(conn, query, candidate_limit, corpus=name)
+        for name in corpora
     ]
 
     dense_ranking: List[Tuple[str, float]] = []
     if embedder is not None:
         try:
             dense_ranking = dense_search_ranked_merged(
-                conn, query, candidate_limit, embedder
+                conn, query, candidate_limit, embedder, corpus=corpus
             )
         except (VecUnavailableError, ModelLoadError) as exc:
             # Request-plane contract (design §6): degrade honestly, never fake
@@ -697,6 +784,151 @@ def hybrid_search(
         conn, query, top_k=top_k, embedder=embedder
     )
     return citations, mode
+
+
+# ── Sprint 13: session-first routing gate (design §3) ───────────────────
+
+def _session_first_probe_score(
+    conn: sqlite3.Connection,
+    query: str,
+    top_k: int,
+    embedder,
+) -> float:
+    """Best RAW session fused score under the Task 0.2 calibration recipe.
+
+    Reproduces the exact recipe ``SESSION_FIRST_MIN_SCORE`` was calibrated on
+    (orchestrator-verified ``phase0_probe_scores.json``): the session-lexical
+    ranking fused with the **merged** dense ranking (both corpora), weights
+    ``[1.0, RRF_DENSE_WEIGHT]``, and NO candidate-set normalisation before the
+    comparison (DOM-1) -- the value is compared on the raw fused scale.
+
+    The merged dense list is load-bearing. With a session-only dense list every
+    session key lands at dense rank 1, its fused score collapses onto the
+    ``1/61 + 3/61 = 4/61 ~= 0.0656`` ceiling, and the gate becomes always-true
+    -- which would route even the docs control into sessions and destroy the
+    fall-through (measured 2026-11-08: session-only dense gives p4 0.0633 and
+    p5 0.0643, i.e. inseparable, versus 0.042709 / 0.042179 on the merged
+    scale).
+
+    Returns ``0.0`` when there is no session candidate at all, so the caller
+    falls through to docs (DOM-6 guards).
+    """
+    candidate_limit = CANDIDATE_LIMIT(top_k)
+    rankings: List[List[str]] = [
+        lexical_search(conn, query, candidate_limit, corpus="session")
+    ]
+    weights: List[float] = [1.0]
+    if embedder is not None:
+        try:
+            merged_dense = dense_search_ranked_merged(
+                conn, query, candidate_limit, embedder
+            )
+        except (VecUnavailableError, ModelLoadError, TypeError):
+            merged_dense = []
+        if merged_dense:
+            rankings.append([fusion_key for fusion_key, _ in merged_dense])
+            weights.append(RRF_DENSE_WEIGHT)
+
+    for fusion_key, score in rrf_fuse(rankings, weights=weights):
+        if fusion_key.startswith("session:"):
+            return float(score)
+    return 0.0
+
+
+def search_routed(
+    conn: sqlite3.Connection,
+    query: str,
+    scope: str = "auto",
+    top_k: int = 10,
+    embedder=None,
+) -> Tuple[List[Citation], str, Answerability]:
+    """Sprint 13 route: choose the corpus, then reuse the hardened hybrid path.
+
+    Seam contract (design §8): returns the SAME ``(citations, mode,
+    answerability)`` tuple as ``hybrid_search_ranked``, so the API layer can
+    swap one call for the other with zero payload change.
+
+    Routing rule (design §3):
+      * ``scope == "docs"``   -> answer from the doc corpus only.
+      * ``scope == "cohort"`` -> answer from the session corpus (NO silent
+        docs fallback; an empty session result abstains).
+      * ``scope == "auto"`` (or any unknown value) -> probe the session
+        corpus; answer from sessions when its RAW top-1 fused score clears
+        ``SESSION_FIRST_MIN_SCORE``, else answer from the LEGACY BROAD search
+        (both corpora), which is the pre-routing behaviour.
+
+    NOTE (Sprint 13 orchestrator fix, 2026-11-08): the ``auto`` fallback is
+    deliberately BROAD (``corpus=None``), not ``corpus="doc"``. A docs-only
+    fallback narrows the evidence window and starves the conjunctive
+    abstention gate (``ABSTENTION_MIN_DOCUMENTS = 2``): a generic query that
+    was answerable before this sprint would become unanswerable, because a
+    doc-only window can expose a single distinct source document. That is a
+    behavioural regression, and it broke 5 pre-existing contract/BYOK tests.
+    Only an EXPLICIT ``scope="docs"`` is doc-only -- a caller that asks for it
+    gets exactly that. Do not "fix" the fallback back to ``corpus="doc"``.
+
+    No new SQL and no string-interpolated query text: every corpus is
+    restricted through the existing ``lexical_search(..., corpus=...)`` /
+    ``dense_search_ranked(..., corpus=...)`` parameters (SEC-3). The abstention
+    gate is untouched -- ``ABSTENTION_MIN_SCORE`` is never lowered and no query
+    is special-cased.
+    """
+    if scope == "docs":
+        return hybrid_search_ranked(
+            conn, query, top_k=top_k, embedder=embedder, corpus="doc"
+        )
+    if scope == "cohort":
+        citations, mode, ans = hybrid_search_ranked(
+            conn, query, top_k=top_k, embedder=embedder, corpus="session"
+        )
+        # D (ratified 2026-11-08): a session-only dense list inflates every
+        # session key to dense rank ~1 (``_session_first_probe_score`` exists
+        # precisely because that collapses onto the 4/61 ceiling and turns the
+        # conjunctive gate near-always-true). Judge the session evidence with
+        # that SAME discriminating merged-scale probe so an explicit cohort
+        # request AGREES with ``auto``: below ``SESSION_FIRST_MIN_SCORE`` the
+        # session evidence is unsupported and the request abstains. The session
+        # citations are still returned so FR-6b ``closest_material`` can name
+        # why it was refused; the answer branch never uses them.
+        if (
+            _session_first_probe_score(conn, query, top_k, embedder)
+            < SESSION_FIRST_MIN_SCORE
+        ):
+            probe = _session_first_probe_score(conn, query, top_k, embedder)
+            ans = Answerability(
+                answerable=False,
+                top_score=probe,
+                min_score=float(SESSION_FIRST_MIN_SCORE),
+                top_dense_distance=ans.top_dense_distance,
+                distinct_documents=ans.distinct_documents,
+                reason="session_evidence_unsupported",
+            )
+        return citations, mode, ans
+
+    # "auto" or any unknown value: session-first with a BROAD fallback.
+    if (
+        _session_first_probe_score(conn, query, top_k, embedder)
+        >= SESSION_FIRST_MIN_SCORE
+    ):
+        citations, mode, ans = hybrid_search_ranked(
+            conn, query, top_k=top_k, embedder=embedder, corpus="session"
+        )
+        if ans.answerable:
+            return citations, mode, ans
+        # B (ratified 2026-11-08): session-first, but the session evidence is
+        # not answerable -- its dense distance sits over the docs-calibrated
+        # limit (e.g. "what did Toby Knight say about agent memory" measures
+        # 0.8495 vs the 0.84 constant even though session_02::chunk_002 holds
+        # the content). Do NOT strand the user on the session taper: fall back
+        # to the legacy BROAD behaviour they had before this sprint so the
+        # query ANSWERS again (from docs) instead of regressing to an
+        # abstention. This is the p3 regression fix; it weakens no gate and
+        # changes no constant.
+        return hybrid_search_ranked(conn, query, top_k=top_k, embedder=embedder)
+    # Broad (corpus=None): the pre-routing behaviour. See the NOTE above --
+    # a docs-only fallback starves ABSTENTION_MIN_DOCUMENTS and regresses
+    # generic queries that used to be answerable.
+    return hybrid_search_ranked(conn, query, top_k=top_k, embedder=embedder)
 
 
 def get_fact(conn: sqlite3.Connection, topic: str) -> List[dict]:

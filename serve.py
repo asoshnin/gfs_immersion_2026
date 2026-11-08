@@ -382,7 +382,7 @@ def _citation_to_result(conn: sqlite3.Connection, citation) -> dict:
     return result
 
 
-def search_hybrid(query: str, top_k: int = 10) -> dict:
+def search_hybrid(query: str, top_k: int = 10, corpus=None, scope=None) -> dict:
     """Run the shared retrieval core and return the search payload.
 
     Sprint 10 / FR-1 adds the abstention trio (``answerable``, ``top_score``,
@@ -390,6 +390,12 @@ def search_hybrid(query: str, top_k: int = 10) -> dict:
     ``top_dense_distance``, ``abstention_reason``) so a client can refuse to
     answer instead of trusting ``total`` (which only echoes ``top_k``).
     Every legacy key is preserved.
+
+    Sprint 13 / FR-1 additivity: ``corpus`` (``"doc"`` | ``"session"`` |
+    ``None``) is forwarded verbatim to ``hybrid_search_ranked``, and ``scope``
+    (``"auto"`` | ``"cohort"`` | ``"docs"``) selects the routed path
+    (``search_routed``). The default (both ``None``) reproduces the pre-Sprint-13
+    call exactly, so every existing caller and payload key is unchanged.
     """
     payload = {
         "query": query,
@@ -420,9 +426,16 @@ def search_hybrid(query: str, top_k: int = 10) -> dict:
 
     conn = _open_search_connection()
     try:
-        citations, mode, answerability = retrieval.hybrid_search_ranked(
-            conn, query, top_k=top_k, embedder=_get_embedder()
-        )
+        if scope is not None:
+            # Sprint 13: routed path (design §8) — identical return tuple to
+            # the hardened path, so the payload below needs no special case.
+            citations, mode, answerability = retrieval.search_routed(
+                conn, query, scope=scope, top_k=top_k, embedder=_get_embedder()
+            )
+        else:
+            citations, mode, answerability = retrieval.hybrid_search_ranked(
+                conn, query, top_k=top_k, embedder=_get_embedder(), corpus=corpus
+            )
         results = [_citation_to_result(conn, citation) for citation in citations]
     finally:
         conn.close()
@@ -563,6 +576,174 @@ ABSTENTION_MESSAGE = (
     "asking about Cloud Run, ADK/SequentialAgent, Firestore, BigQuery, "
     "Secret Manager, or a specific session topic."
 )
+
+
+# ── Sprint 13 / FR-6: honest abstention support ────────────────────
+#
+# Two additive keys ride on the abstain branch only:
+#   * ``closest_material`` — the nearest chunks, each tagged with why it was
+#     NOT accepted. It is a SEPARATE top-level key and is structurally barred
+#     from grounding: it is never merged into ``excerpts``/``sources`` and its
+#     text is never interpolated into ``system_prompt`` (which stays ``None``
+#     on abstention). Weak context must not become evidence.
+#   * ``suggested_questions`` — deterministic, corpus-derived questions that
+#     have EACH been re-verified against the SAME abstention gate as a real
+#     query. An unverified guess is dropped, never shipped.
+
+# The validation allowlist for the optional /api/chat ``scope`` field
+# (Sprint 13 / FR-2). Anything else — a typo, an absent key, a non-string —
+# resolves to "auto"; an unvalidated value is never forwarded to the core.
+CHAT_SCOPE_VALUES = ("auto", "cohort", "docs")
+
+# Bound the suggestion candidate set (FR-6c: "keep it cheap"). The catalogue
+# yields a handful of titles; we never probe more than this per request and we
+# stop as soon as ``limit`` verified questions are found.
+MAX_SUGGESTION_CANDIDATES = 12
+# One template, applied to deterministic corpus titles. Candidates are DERIVED
+# from the corpus, never authored by a model.
+SUGGESTION_TEMPLATE = "What is {title}?"
+
+
+def _resolve_chat_scope(requested, user_message: str) -> str:
+    """Validate the optional ``scope`` field and resolve it to a routed scope.
+
+    Sprint 13 / FR-2: the only accepted values are ``auto`` | ``cohort`` |
+    ``docs``; an unknown, absent or non-string value resolves to ``auto``. The
+    field is never forwarded unvalidated. On ``auto`` the cohort classifier
+    decides the routed scope; since option B (ratified 2026-11-08) the
+    session-first AUTO gate is the routed scope for classifier-classified
+    queries too (it already prefers sessions and adds the broad fallback),
+    while an explicit ``cohort`` scope stays strict session-only.
+    """
+    if requested not in CHAT_SCOPE_VALUES:
+        requested = "auto"
+    if requested == "auto":
+        # B (ratified 2026-11-08): the cohort classifier routes classified
+        # queries through the SESSION-FIRST AUTO gate, not strict "cohort".
+        # search_routed(scope="auto") already prefers sessions via
+        # _session_first_probe_score, and it adds the legacy BROAD fallback
+        # when the session evidence is NOT answerable -- so a cohort speaker
+        # question that regressed to an abstention (p3: "what did Toby Knight
+        # say about agent memory", session dense 0.8495 > 0.84) ANSWERS again
+        # from docs. Strict "cohort" remains for explicit API callers who
+        # truly want session-only (no silent docs fallback).
+        return "auto"
+    return requested
+
+
+def _closest_material_from_results(results: list, reason: str) -> list:
+    """Nearest chunks on an abstention, each tagged with why it was refused.
+
+    Same shape as an excerpt plus ``not_accepted_reason`` and an explicit
+    ``accepted: False`` flag. This list is DISPLAY-ONLY: the caller keeps it a
+    separate top-level key and never lets it into ``excerpts``/``sources`` or
+    the prompt (FR-6b).
+    """
+    material = []
+    for excerpt in _excerpts_from_results(results):
+        material.append(
+            {
+                "fusion_key": excerpt["fusion_key"],
+                "title": excerpt["title"],
+                "url": excerpt["url"],
+                "snippet": excerpt["snippet"],
+                "accepted": False,
+                "not_accepted_reason": reason,
+            }
+        )
+    return material
+
+
+def _suggestion_candidates() -> list:
+    """Deterministic candidate questions derived from the published catalog.
+
+    Bounded (``MAX_SUGGESTION_CANDIDATES``) and ordered by catalog order so the
+    output is reproducible. The candidates are NOT authored by a model: they
+    are session/concept titles rendered through one fixed template.
+    """
+    catalog = load_catalog()
+    titles: list = []
+    for session in catalog.get("sessions", []):
+        title = (session.get("title") or "").strip()
+        if title:
+            titles.append(title)
+    for concept in catalog.get("concepts", []):
+        title = (concept.get("title") or "").strip()
+        if title:
+            titles.append(title)
+
+    candidates: list = []
+    seen: set = set()
+    for title in titles:
+        # A question ending in "?" would double up under the template.
+        normalized = title.rstrip("?").strip()
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        candidates.append(SUGGESTION_TEMPLATE.format(title=normalized))
+    return candidates[:MAX_SUGGESTION_CANDIDATES]
+
+
+def suggest_questions(query=None, limit: int = 3) -> list:
+    """Return up to ``limit`` corpus-derived questions that ARE answerable.
+
+    Sprint 13 / FR-6c. Hard invariant: every returned question is FILTERED by
+    the SAME gate a real query passes — ``retrieval.search_routed`` +
+    ``assess_answerability``. A candidate the gate refuses is dropped; if none
+    clear the gate the result is ``[]`` (a valid, honest outcome). No candidate
+    is asserted answerable.
+
+    Cost is bounded: the candidate set is capped and iteration stops once
+    ``limit`` verified questions exist (usually the first few).
+    """
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        limit = 3
+    if limit < 1 or not os.path.exists(GFS_DB_PATH):
+        return []
+
+    candidates = _suggestion_candidates()
+    if not candidates:
+        return []
+
+    verified: list = []
+    conn = _open_search_connection()
+    try:
+        embedder = _get_embedder()
+        for candidate in candidates:
+            try:
+                citations, _mode, answerability = retrieval.search_routed(
+                    conn, candidate, scope="auto", top_k=10, embedder=embedder
+                )
+            except Exception:  # a fix-up must never break the abstain path
+                logger.warning(
+                    "Suggestion probe failed for %r; skipping", candidate,
+                    exc_info=True,
+                )
+                continue
+            if not answerability.answerable:
+                continue
+            verified.append(
+                {
+                    "question": candidate,
+                    "top_score": round(answerability.top_score, 6),
+                    "min_score": answerability.min_score,
+                    "reason": answerability.reason,
+                    "fusion_key": (
+                        citations[0].fusion_key if citations else None
+                    ),
+                }
+            )
+            if len(verified) >= limit:
+                break
+    finally:
+        conn.close()
+    return verified
+
 
 # ── Versioned system prompt (Sprint 10 / FR-5) ─────────────────────
 # The prompt is a shipped asset, not an in-code f-string. It is read exactly
@@ -1211,11 +1392,18 @@ class GFSImmersionHandler(SimpleHTTPRequestHandler):
                 self._send_json({"error": "Message required (max 2000 chars)"}, 400)
                 return
 
+            # Sprint 13 / FR-2: optional ``scope`` field (auto | cohort | docs).
+            # An unknown/absent value resolves to "auto"; the value is
+            # validated here and never forwarded raw to the retrieval core.
+            chat_scope = _resolve_chat_scope(body.get("scope"), user_message)
+
             # FR-2: retrieve through the SAME core as /api/search, over the
             # full 392-doc + 80-session corpus. A fetch failure is reported as
             # a retrieval error, never papered over with an ungrounded answer.
             try:
-                payload = search_hybrid(user_message, top_k=CHAT_TOP_K)
+                payload = search_hybrid(
+                    user_message, top_k=CHAT_TOP_K, scope=chat_scope
+                )
             except Exception:
                 logger.exception("Chat retrieval failed for %r", user_message)
                 self._send_json(
@@ -1237,6 +1425,23 @@ class GFSImmersionHandler(SimpleHTTPRequestHandler):
             if not answerable:
                 # FR-2/D3: no evidence window means no prompt and no generation.
                 # A model asked to answer from weak retrieval will hallucinate.
+                abstention_reason = (
+                    "no_resolvable_citation"
+                    if payload["answerable"]
+                    else payload["abstention_reason"]
+                )
+                # Sprint 13 / FR-6b: display-only nearest chunks, each tagged
+                # with why it was refused. Kept in its OWN top-level key -- it
+                # is never merged into excerpts/sources and its text never
+                # reaches system_prompt (which stays None).
+                closest_material = _closest_material_from_results(
+                    payload["results"], abstention_reason
+                )
+                # Sprint 13 / FR-6c: only questions that independently clear
+                # the SAME gate as a real query; [] is a valid result.
+                suggested_questions = suggest_questions(
+                    query=user_message, limit=3
+                )
                 self._send_json(
                     {
                         "excerpts": [],
@@ -1244,11 +1449,9 @@ class GFSImmersionHandler(SimpleHTTPRequestHandler):
                         "system_prompt": None,
                         "answerable": False,
                         "abstained": True,
-                        "abstention_reason": (
-                            "no_resolvable_citation"
-                            if payload["answerable"]
-                            else payload["abstention_reason"]
-                        ),
+                        "abstention_reason": abstention_reason,
+                        "closest_material": closest_material,
+                        "suggested_questions": suggested_questions,
                         "top_score": payload["top_score"],
                         "min_score": payload["min_score"],
                         "mode": payload["mode"],
