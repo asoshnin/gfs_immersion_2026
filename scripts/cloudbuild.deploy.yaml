@@ -1,6 +1,11 @@
+# Corrected 2026-11-08: 02_public_hub is now a self-sufficient published repo
+# (vendored crawl/, site/, data/, prompts/ at its root) -- the Dockerfile's own
+# comment says: build from the repo root with `gcloud builds submit --tag IMG .`.
+# The old '-f 02_public_hub/Dockerfile' assumed a monorepo parent context that no
+# longer exists and failed in /workspace. Build from the repo root (this dir).
 steps:
   - name: 'gcr.io/cloud-builders/docker'
     args: ['build', '-t', 'us-central1-docker.pkg.dev/als-gfs-immersion-hub/gfs-platform/app:latest',
-           '-f', '02_public_hub/Dockerfile', '.']
+           '-f', 'Dockerfile', '.']
 images:
   - 'us-central1-docker.pkg.dev/als-gfs-immersion-hub/gfs-platform/app:latest'
