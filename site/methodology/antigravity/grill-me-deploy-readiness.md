@@ -13,7 +13,8 @@ Copy and paste into Google Antigravity IDE before initiating your first producti
 Evaluate our deployment readiness runbook in 06_deploy/runbooks/production-deployment.md and container configurations.
 
 Please grill me on this deployment plan covering:
-1. Free-tier compliance: verify Cloud Run flags enforce --memory 512Mi, --cpu 1, --min-instances 0, and --max-instances 2.
+1. Cost-control / scale-to-zero compliance: verify Cloud Run flags enforce --memory 1Gi, --cpu 1, --min-instances 0, and --max-instances 2 (1Gi fits the fastembed + onnxruntime + sqlite-vec stack; 512Mi risks OOM).
+2. Region: confirm us-central1 (Always-Free) and that the deploy matches the repo's free-tier guard.
 2. Health check endpoints: verify /api/health probe behavior under traffic spikes and cold starts.
 3. Automated rollback trigger criteria: what metric threshold triggers an immediate traffic shift back to the prior revision?
 4. Cloud Build pipeline determinism: ensure all dependencies are pinned and unit tests block image pushing on failure.

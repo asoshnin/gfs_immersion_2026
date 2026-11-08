@@ -47,3 +47,45 @@ last_updated: "2026-10-31"
 - **Inference Cost vs SaaS ARR:** Gross margin target $\ge 75\%$.
 - **Customer Acquisition Defensibility:** Founder-led wedge or organic developer viral loop.
 - **Phase 2 In-Person Summit Alignment:** Demonstrates live shipping velocity and clear customer proof-in-motion.
+
+---
+
+## 4. Antigravity `/grill-me` Checkpoint
+
+After completing sections 1–3, run in Antigravity:
+
+```
+/grill-me
+Review this Vision Doc for {{PROJECT_NAME}}. Challenge my:
+1. Five-Lenses expansion vectors and where they are unsupported by evidence.
+2. Gross-margin and unit-economics assumptions ($\ge 75\%$ target).
+3. Moat defensibility if a frontier model commoditizes the core mechanic.
+```
+
+## 5. Next Steps
+
+1. Hand off the validated Vision Doc to the PRD (`01_specs/prd.md`).
+2. Open the ADR to record the first architecture decision.
+3. Move to `02_design/` for the Infra Design and mockups.
+
+---
+
+## Filled-In Example
+
+<details>
+<summary>Example: AssetIntel — Document Intelligence for Mid-Market Operations</summary>
+
+### 1. Executive Summary
+AssetIntel delivers instant, grounded answers from a company's own operational documents (invoices, contracts, runbooks) for \${{}}number of employees, by {{}}mechanism, eliminating manual document triage.
+
+### 2. Five Lenses
+1. **10x More Places:** From finance back-office to legal and procurement verticals without re-building the extraction engine.
+2. **Replace Legacy:** Displaces a manual spreadsheet-and-email review workflow billed to operations.
+3. **Market Standard:** Publishes an open extraction contract schema as the default interchange.
+4. **10x More Differentiated:** MoM from proprietary document corpus + permissioned retrieval, not prompt length.
+5. **Beat Competition:** A 2-engineer team + AI agent fleet out-ships a 20-person services agency.
+
+### 3. VC Math
+- Target gross margin ≥ 75% on inference per document.
+- Wedge: founder-led demos on the customer's own files → proof in motion in week 1.
+</details>

@@ -1,48 +1,65 @@
 #!/usr/bin/env python3
 """
-ADK Starter Recipe: LoopAgent (Iterative Refinement & Quality Gate Topology)
+ADK Starter Recipe: LoopAgent (Iterative Refinement with a Hard Iteration Bound)
 Source: Google for Startups Immersion EMEA 2026 — Session 02 (Building Agents with ADK)
-Compatible with: google-adk >= 2.12.0, Python 3.10+
+Compatible with: google-adk 2.14.0 (verified against the installed release), Python 3.10+
+
+REAL ADK — this is runnable google-adk code, not pseudocode.
+A loop agent iterates a generator/critic pair up to ``max_iterations`` and stops
+at a hard budget cap, instead of inventing its own stop signal.
 """
 
-COMPLETION_SIGNAL = "VALIDATION_PASSED"
+#   pip install "google-adk>=2.14.0"
 
-class LoopAgentDemo:
-    """
-    Demonstrates iterative generation-critique loop bounded by max_iterations.
-    Exits early when gatekeeper validation passes via tool escalation.
-    """
-    def __init__(self, name: str, max_iterations: int = 4):
-        self.name = name
-        self.max_iterations = max_iterations
+from google.adk.agents import Agent, LoopAgent
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
 
-    def run(self, draft_prompt: str) -> dict:
-        print(f"[{self.name}] Initiating refinement loop (max iterations: {self.max_iterations}).")
-        current_draft = f"Initial draft for: {draft_prompt}"
-        
-        for iteration in range(1, self.max_iterations + 1):
-            print(f"  -> Iteration {iteration}: Evaluating draft...")
-            # Critique logic: passes on iteration 2 in this demo
-            if iteration >= 2:
-                print(f"     Gatekeeper check: {COMPLETION_SIGNAL}!")
-                return {
-                    "status": "COMPLETED",
-                    "iterations": iteration,
-                    "final_output": current_draft,
-                    "exit_reason": "gatekeeper_escalation"
-                }
-            else:
-                print("     Critique: Needs tighter error handling. Refinement applied.")
-                current_draft += " + [Error Handling Added]"
+GEMINI_MODEL = "gemini-2.5-flash"  # your project's model
 
-        return {
-            "status": "MAX_ITERATIONS_REACHED",
-            "iterations": self.max_iterations,
-            "final_output": current_draft,
-            "exit_reason": "budget_cap"
-        }
+MAX_ITERATIONS = 4  # hard bound — the loop will never exceed this
+
+
+def build_refinement_loop() -> LoopAgent:
+    """Generator + critic loop bounded by max_iterations (quality gate)."""
+    return LoopAgent(
+        name="refinement_loop",
+        max_iterations=MAX_ITERATIONS,
+        sub_agents=[
+            Agent(
+                name="generator",
+                model=GEMINI_MODEL,
+                instruction=(
+                    "Produce or improve a draft solution for the task in the conversation. "
+                    "After each critic pass, incorporate the critique and emit a tighter version."
+                ),
+            ),
+            Agent(
+                name="critic",
+                model=GEMINI_MODEL,
+                instruction=(
+                    "Act as a demanding reviewer. Identify concrete defects (correctness, "
+                    "error-handling, security, clarity). If the draft is production-ready, "
+                    "say 'VALIDATION_ACCEPTED'; otherwise list fixes for the generator."
+                ),
+            ),
+        ],
+    )
+
+
+def main() -> None:
+    loop = build_refinement_loop()
+    session_service = InMemorySessionService()
+    runner = Runner(
+        agent=loop,
+        app_name="refinement_demo",
+        session_service=session_service,
+    )
+    print("Built LoopAgent pipeline:", loop.name)
+    print("Sub-agents:", [s.name for s in loop.sub_agents])
+    print("max_iterations (hard stop):", loop.max_iterations)
+    print("Run with a real API key, e.g. export GOOGLE_API_KEY=... then runner.run_async(...)")
+
 
 if __name__ == "__main__":
-    loop = LoopAgentDemo(name="DraftRefinementLoop", max_iterations=4)
-    result = loop.run("Cloud Run Deployment Manifest")
-    print("Loop execution result:", result)
+    main()

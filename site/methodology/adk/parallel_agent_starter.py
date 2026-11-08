@@ -1,42 +1,70 @@
 #!/usr/bin/env python3
 """
-ADK Starter Recipe: ParallelAgent (Concurrent Fan-Out / Fan-In Topology)
+ADK Starter Recipe: ParallelAgent (Concurrent Fan-Out / Fan-In)
 Source: Google for Startups Immersion EMEA 2026 — Session 02 (Building Agents with ADK)
-Compatible with: google-adk >= 2.12.0, Python 3.10+
+Compatible with: google-adk 2.14.0 (verified against the installed release), Python 3.10+
+
+REAL ADK — this is runnable google-adk code, not pseudocode.
+ParallelAgent runs independent specialist sub-agents concurrently (genuine
+parallel execution), and ADK gathers their outputs; there is no invented
+"MergerAgent" primitive — synthesis is the caller's job.
 """
 
-class ParallelAgentDemo:
-    """
-    Demonstrates concurrent fan-out across independent domain specialists,
-    followed by downstream synthesis into a unified decision artifact.
-    """
-    def __init__(self, name: str, branches: list):
-        self.name = name
-        self.branches = branches
+#   pip install "google-adk>=2.14.0"
 
-    def run(self, query: str) -> dict:
-        print(f"[{self.name}] Concurrent fan-out across {len(self.branches)} specialists...")
-        branch_results = {}
-        for b in self.branches:
-            b_name = b["name"]
-            print(f"  -> Branch '{b_name}' processing query concurrently...")
-            branch_results[b_name] = f"Specialist assessment from {b_name} regarding '{query}'"
-        
-        # Downstream merger phase
-        print("  -> Downstream MergerAgent synthesizing findings...")
-        synthesis = {
-            "query": query,
-            "branch_findings": branch_results,
-            "consensus": "Unified recommendation compiled from all concurrent branches."
-        }
-        return synthesis
+from google.adk.agents import Agent, ParallelAgent
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+
+GEMINI_MODEL = "gemini-2.5-flash"  # your project's model
+
+
+def build_triage_team() -> ParallelAgent:
+    """Concurrent branch experts, each isolated; ADK fuses outputs post-run."""
+    return ParallelAgent(
+        name="triage_team",
+        sub_agents=[
+            Agent(
+                name="clinical_specialist",
+                model=GEMINI_MODEL,
+                instruction=(
+                    "Assess the query from a clinical-safety perspective (risk, red flags, "
+                    "regulatory exposure). Do not give unsupported diagnostic advice."
+                ),
+            ),
+            Agent(
+                name="regulatory_specialist",
+                model=GEMINI_MODEL,
+                instruction=(
+                    "Assess from a data-governance / regulatory angle (GDPR, residency, "
+                    "DPIA triggers, records of processing)."
+                ),
+            ),
+            Agent(
+                name="security_specialist",
+                model=GEMINI_MODEL,
+                instruction=(
+                    "Assess from a security angle (IAM least-privilege, secret handling, "
+                    "public ingress exposure, Model Armor placement)."
+                ),
+            ),
+        ],
+    )
+
+
+def main() -> None:
+    team = build_triage_team()
+    session_service = InMemorySessionService()
+    runner = Runner(
+        agent=team,
+        app_name="triage_demo",
+        session_service=session_service,
+    )
+    print("Built ParallelAgent team:", team.name)
+    print("Branches (concurrent):", [s.name for s in team.sub_agents])
+    print("Run with a real API key, e.g. export GOOGLE_API_KEY=... then runner.run_async(...)")
+    print("Collect each branch's output from the run events and synthesize downstream.")
+
 
 if __name__ == "__main__":
-    branches = [
-        {"name": "ClinicalSpecialist"},
-        {"name": "RegulatorySpecialist"},
-        {"name": "SecuritySpecialist"}
-    ]
-    orchestrator = ParallelAgentDemo(name="TriageSynthesisTeam", branches=branches)
-    output = orchestrator.run("Deploying Ambient CDS on Vertex AI")
-    print("Synthesis consensus:", output["consensus"])
+    main()

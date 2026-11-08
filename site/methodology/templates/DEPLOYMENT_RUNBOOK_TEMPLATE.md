@@ -10,7 +10,7 @@ last_updated: "2026-10-31"
 
 > **Google SDLC Stage:** Build & Staged Review  
 > **Source:** Google for Startups Immersion EMEA 2026 — Session 03: Deploying Serverless AI on Google Cloud  
-> **Target Target:** Google Cloud Run + Firebase Hosting  
+> **Target:** Google Cloud Run + Firebase Hosting  
 
 ---
 
@@ -29,18 +29,21 @@ Before deploying, verify:
 ```bash
 # Step 1: Set environmental variables
 export GCP_PROJECT="{{GCP_PROJECT_ID}}"
-export GCP_REGION="{{GCP_REGION:-europe-west1}}"
+export GCP_REGION="{{GCP_REGION:-us-central1}}"  # us-central1 = Always-Free Cloud Run region
 export SERVICE_NAME="{{SERVICE_NAME}}"
 
-# Step 2: Build container image via Google Cloud Build
-gcloud builds submit --tag "gcr.io/$GCP_PROJECT/$SERVICE_NAME" --project "$GCP_PROJECT"
+# Step 2: Build container image via Google Cloud Build (Artifact Registry)
+gcloud builds submit --tag "$GCP_REGION-docker.pkg.dev/$GCP_PROJECT/$SERVICE_NAME/app" --project "$GCP_PROJECT"
 
-# Step 3: Deploy to Cloud Run with free-tier flags
+# Step 3: Deploy to Cloud Run with cost-control (scale-to-zero) flags
+# NOTE: --allow-unauthenticated makes the service publicly callable. For anything
+# handling user or clinical data, use --no-allow-unauthenticated + Firebase Auth/IAP
+# and add rate-limiting / Model Armor before GA.
 gcloud run deploy "$SERVICE_NAME" \
-  --image "gcr.io/$GCP_PROJECT/$SERVICE_NAME" \
+  --image "$GCP_REGION-docker.pkg.dev/$GCP_PROJECT/$SERVICE_NAME/app" \
   --platform managed \
   --region "$GCP_REGION" \
-  --memory 512Mi \
+  --memory 1Gi \
   --cpu 1 \
   --min-instances 0 \
   --max-instances 2 \
@@ -59,11 +62,8 @@ firebase deploy --only hosting --project "$GCP_PROJECT"
 ```bash
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" --region "$GCP_REGION" --format 'value(status.url)')
 
-# Health Check
+# Smoke test (generic health check — substitute your real endpoint)
 curl -f "$SERVICE_URL/api/health" || exit 1
-
-# Smoke test search
-curl -f "$SERVICE_URL/api/search?q=test" || exit 1
 ```
 
 ---

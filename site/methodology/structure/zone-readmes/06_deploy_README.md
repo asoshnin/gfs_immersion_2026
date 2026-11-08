@@ -11,7 +11,7 @@
 - `docker/` — Dockerfiles & container configs
 
 ## GCP-Specific Notes
-- Cloud Run free-tier flags: `--min-instances 0`, `--memory 512Mi`, `--cpu 1`, `--max-instances 2`.
+- Cloud Run cost-control (scale-to-zero) flags: `--min-instances 0`, `--memory 1Gi`, `--cpu 1`, `--max-instances 2`.
 - Firebase Hosting with Cloud Run rewrite: proxy `/api/*` to Cloud Run service.
 - Use Cloud Build for container builds — not local Docker.
 - Smoke test: `curl $SERVICE_URL/api/health` after deploy.

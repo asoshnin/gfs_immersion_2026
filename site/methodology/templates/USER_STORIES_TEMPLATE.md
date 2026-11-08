@@ -66,18 +66,18 @@ Scenario: {{SCENARIO_NAME}}
 <details>
 <summary>Example: Session Synthesis Search & Citation Inspection</summary>
 
-### Story 1.1: BM25 Lexical Keyword Search
+### Story 1.1: Semantic Retrieval over Session Syntheses
 - **As a:** Cohort Founder
-- **I want to:** Search for "Cloud Run min-instances" across session transcripts
-- **So that:** I can instantly locate the exact quote and deployment recommendation without watching video replays.
+- **I want to:** ask the portal assistant about a deployment topic (e.g. "Cloud Run scaling")
+- **So that:** I can get a grounded answer citing the relevant session synthesis without re-watching the recording.
 
 **Acceptance Criteria:**
 ```gherkin
-Scenario: Search returns ranked session chunks
-  Given the user enters "min-instances" into the portal search box
-  When the search executes against /api/search
-  Then at least 2 relevant snippets from Session 03 are displayed within 50ms
-  And each snippet shows the session badge, title, and file locus
+Scenario: Grounded answer cites a session source
+  Given the user asks the assistant a deployment question
+  When the retrieval returns an answerable result with a resolvable source
+  Then the answer render a citation link to the source session
+  And the cited excerpt appears in the retrieved evidence
 ```
 
 </details>

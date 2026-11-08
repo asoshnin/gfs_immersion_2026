@@ -43,8 +43,14 @@
 <body>
   <div class="scorecard-container">
     <div class="header">
-      <h2>📈 Antler VC Readiness Scorecard</h2>
-      <p>Self-assessment based on Adam French's <strong>Five Lenses to Make an Idea Bigger</strong> (Google for Startups Immersion Session 04).</p>
+      <h2>📈 VC Readiness Scorecard</h2>
+      <p>Self-assessment tool based on Adam French's <strong>Five Lenses to Make an Idea Bigger</strong>
+      (Google for Startups Immersion Session 04).</p>
+      <p class="lens-desc" style="margin-top:6px">
+        ⚠️ Self-assessment only — <em>not</em> created, endorsed, or reviewed by Antler, Google, or
+the program organisers. Scores and thresholds (>4.0 Ready / >2.6 Promising) are the tool author's
+illustrative cutoffs and are not a funding assessment.
+      </p>
     </div>
 
     <!-- Lens 1 -->
@@ -150,18 +156,15 @@
         advice.innerText = "Significant venture math gaps. Review Adam French's Session 04 talk to expand market scope and reframe defensibility.";
       }
 
-      // Persist state
-      localStorage.setItem('gfs_vc_scorecard', JSON.stringify({ v1, v2, v3, v4, v5 }));
+      // Persist state (scores + notes)
+      localStorage.setItem('gfs_vc_scorecard', JSON.stringify({ v1, v2, v3, v4, v5, n1: document.getElementById('notes1').value, n2: document.getElementById('notes2').value, n3: document.getElementById('notes3').value, n4: document.getElementById('notes4').value, n5: document.getElementById('notes5').value }));
     }
 
     // Load saved
     try {
       const saved = JSON.parse(localStorage.getItem('gfs_vc_scorecard') || '{}');
-      if (saved.v1) document.getElementById('lens1').value = saved.v1;
-      if (saved.v2) document.getElementById('lens2').value = saved.v2;
-      if (saved.v3) document.getElementById('lens3').value = saved.v3;
-      if (saved.v4) document.getElementById('lens4').value = saved.v4;
-      if (saved.v5) document.getElementById('lens5').value = saved.v5;
+      ['v1','v2','v3','v4','v5'].forEach((k,i) => { const id='lens'+(i+1); if (saved[k] !== undefined) document.getElementById(id).value = saved[k]; });
+      ['n1','n2','n3','n4','n5'].forEach((k,i) => { const id='notes'+(i+1); if (saved[k] !== undefined) document.getElementById(id).value = saved[k]; });
     } catch(e) {}
     updateScore();
   </script>

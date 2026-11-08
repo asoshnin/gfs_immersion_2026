@@ -6,13 +6,12 @@
 
 ## What This Is
 
-A **turnkey project scaffold** for founders building on Google Cloud. Clone this kit, fill in 3 project-specific values, and have a deployable GCP skeleton in under 10 minutes.
+A **turnkey project scaffold** for founders building on Google Cloud. Clone this kit, fill in
+your project-specific values (project ID, region, model), and get a working GCP starter structure.
 
-This kit codifies Google's opinionated 4-stage agentic SDLC learned during the immersion program:
-
-```
-Plan & Design ──► Browser Mockup ──► Write Spec ──► Build & Staged Review
-```
+This kit codifies an **opinionated 4-stage agentic SDLC** (Plan & Design → Browser Mockup → Write
+Spec → Build & Staged Review) derived from the immersion program's sessions — it is the kit author's
+own framing (VWOOSH), not an official Google-endorsed standard.
 
 ## What's Inside
 
@@ -28,14 +27,17 @@ Plan & Design ──► Browser Mockup ──► Write Spec ──► Build & St
 
 ## Quick Start
 
+> **Prerequisites:** a Google Cloud billing account, `gcloud` authenticated, and the Cloud Run /
+> Cloud Build / Secret Manager APIs enabled. Container builds take a few minutes.
+
 ```bash
 # 1. Copy the bootstrapper to your new project directory
 cp methodology/scripts/gcp-project-init.sh ~/my-new-gcp-project/
 cd ~/my-new-gcp-project/
 
-# 2. Set your project ID and region
+# 2. Set your project ID and region (us-central1 is the always-free Cloud Run region)
 export GCP_PROJECT="your-project-id"
-export GCP_REGION="europe-west1"
+export GCP_REGION="us-central1"
 
 # 3. Run the bootstrapper
 ./gcp-project-init.sh

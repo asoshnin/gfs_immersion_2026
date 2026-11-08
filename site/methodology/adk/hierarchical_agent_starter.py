@@ -1,45 +1,68 @@
 #!/usr/bin/env python3
 """
-ADK Starter Recipe: Hierarchical Coordinator (Root Router Topology)
+ADK Starter Recipe: Hierarchical Coordinator (Root Router + Specialist Sub-Agents)
 Source: Google for Startups Immersion EMEA 2026 — Session 02 (Building Agents with ADK)
-Compatible with: google-adk >= 2.12.0, Python 3.10+
+Compatible with: google-adk 2.14.0 (verified against the installed release), Python 3.10+
+
+REAL ADK — this is runnable google-adk code, not pseudocode.
+There is NO ``HierarchicalAgent`` class in google-adk. Hierarchical delegation is
+done by a root ``Agent`` with ``sub_agents`` (or a ``ManagedAgent``); the model
+routes intent to the matching specialist. Do not hand-roll a keyword router.
 """
 
-class HierarchicalCoordinatorDemo:
-    """
-    Demonstrates root_agent router delegating tasks to sub-agents
-    based on declarative agent descriptions rather than monolithic tool lists.
-    """
-    def __init__(self, name: str, sub_agents: dict):
-        self.name = name
-        self.sub_agents = sub_agents
+#   pip install "google-adk>=2.14.0"
 
-    def route_and_execute(self, user_intent: str) -> str:
-        intent_lower = user_intent.lower()
-        print(f"[{self.name}] Routing user intent: '{user_intent}'")
-        
-        selected_agent = None
-        for agent_name, spec in self.sub_agents.items():
-            for kw in spec["keywords"]:
-                if kw in intent_lower:
-                    selected_agent = agent_name
-                    break
-            if selected_agent:
-                break
-                
-        if not selected_agent:
-            selected_agent = "GeneralAssistant"
-            
-        print(f"  -> Delegating task to specialized sub-agent: [{selected_agent}]")
-        return f"Response from [{selected_agent}]: Handled intent '{user_intent}'."
+from google.adk.agents import Agent
+from google.adk.runners import Runner
+from google.adk.sessions import InMemorySessionService
+
+GEMINI_MODEL = "gemini-2.5-flash"  # your project's model
+
+
+def build_coordinator() -> Agent:
+    """Root coordinator delegates intent to specialized sub-agents."""
+    return Agent(
+        name="root_coordinator",
+        model=GEMINI_MODEL,
+        instruction=(
+            "You are a coordinator. Read the user's intent and delegate to the "
+            "most appropriate specialist sub-agent below. Reply with that agent's answer."
+        ),
+        sub_agents=[
+            Agent(
+                name="data_analyst",
+                model=GEMINI_MODEL,
+                description="Handles metrics, analytics, CSV, queries.",
+                instruction="Answer analytics/metrics questions from the conversation context.",
+            ),
+            Agent(
+                name="cloud_architect",
+                model=GEMINI_MODEL,
+                description="Handles Cloud Run, GCP, deployment, infrastructure.",
+                instruction="Answer GCP architecture and Cloud Run deployment questions.",
+            ),
+            Agent(
+                name="compliance_auditor",
+                model=GEMINI_MODEL,
+                description="Handles GDPR, HIPAA, privacy, security.",
+                instruction="Answer data-privacy and compliance questions.",
+            ),
+        ],
+    )
+
+
+def main() -> None:
+    coordinator = build_coordinator()
+    session_service = InMemorySessionService()
+    runner = Runner(
+        agent=coordinator,
+        app_name="coordinator_demo",
+        session_service=session_service,
+    )
+    print("Built hierarchical coordinator:", coordinator.name)
+    print("Specialists (delegation targets):", [s.name for s in coordinator.sub_agents])
+    print("Run with a real API key, e.g. export GOOGLE_API_KEY=... then runner.run_async(...)")
+
 
 if __name__ == "__main__":
-    agents = {
-        "DataAnalyst": {"keywords": ["metrics", "analytics", "csv", "query"], "desc": "Analyzes metrics"},
-        "CloudArchitect": {"keywords": ["cloud run", "gcp", "deploy", "infra"], "desc": "Plans GCP infrastructure"},
-        "ComplianceAuditor": {"keywords": ["gdpr", "hipaa", "privacy", "security"], "desc": "Audits compliance"}
-    }
-    
-    coordinator = HierarchicalCoordinatorDemo(name="RootCoordinator", sub_agents=agents)
-    res = coordinator.route_and_execute("How do we scale Cloud Run with min-instances?")
-    print(res)
+    main()

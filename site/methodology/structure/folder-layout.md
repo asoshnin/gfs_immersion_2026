@@ -1,7 +1,7 @@
 # GCP-Native Project Folder Layout
 
 **Google SDLC Stage:** Plan & Design → Build & Staged Review
-**Inspired by:** Johnny.Decimal classification (VWOOSH) + Google's 4-Stage Agentic SDLC
+**Inspired by:** Johnny.Decimal classification + the kit's 4-stage agentic SDLC (derived from the program)
 **Source:** Google for Startups Immersion EMEA 2026 — Sessions 01 & 03
 
 ---
@@ -77,6 +77,10 @@
 2. **Antigravity-Compatible:** The zone naming convention is recognized by Antigravity's project indexer. `/grill-me` knows which zones to inspect for each SDLC stage.
 3. **Bootable:** Run `gcp-project-init.sh` and this entire structure is created with READMEs and `.env.example` in one command.
 4. **Opinionated:** Not generic — this layout assumes Cloud Run, Firebase, Artifact Registry, and Gemini API. Swap the tools if you're on a different stack.
+
+> **Note:** "zone naming recognized by Antigravity's indexer" is an aspirational convention this kit
+> applies consistently so `/grill-me` prompts can reference stable paths; it is not a documented
+> Google/Antigravity capability guarantee.
 
 ---
 

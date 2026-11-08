@@ -64,10 +64,15 @@ This document specifies the business objectives, core personas, functional requi
 | Category | Requirement | Target Metric | GCP Implementation |
 |---|---|---|---|
 | **Latency** | Time to first response | < {{TARGET_LATENCY_MS}} ms | Cloud Run CPU always allocated / min-instances=1 |
-| **Inference Cost** | Cost per session/request | < ${{TARGET_COST}} | Gemini 2.5 Flash / Flash Lite cascade |
+| **Inference Cost** | Cost per session/request | < ${{TARGET_COST}} | {{GEMINI_MODEL}} (default `gemini-2.5-flash`) / Flash Lite cascade |
 | **Availability** | Monthly uptime | 99.9% | Cloud Run managed multi-zone regional deployment |
-| **Security & Privacy** | Credential & data protection | Zero plain secrets | Google Secret Manager (`gcp:secretmanager:...`) |
-| **Compliance** | User privacy standard | GDPR / HIPAA / Local | Sensitive Data Protection (SDP) + Model Armor |
+| **Security & Privacy** | Credential & data protection | Zero plain secrets | Google Secret Manager (`--set-secrets`, Cloud Run) |
+| **Compliance*** | Privacy controls (not a compliance certificate) | DPIA + DPA in place | Sensitive Data Protection (SDP) + Model Armor |
+
+> *Security/privacy controls such as SDP and Model Armor **support** a compliance programme; they do
+> not by themselves confer GDPR/HIPAA/other compliance. Complete a DPIA, sign data-processing
+> agreements, set a data-retention schedule, and confirm data-residency when handling personal or
+> special-category data.
 
 ---
 
@@ -97,7 +102,14 @@ Review this PRD for {{PROJECT_NAME}}. Challenge my assumptions regarding:
 ## Filled-In Example
 
 <details>
-<summary>Example: CloudClinician Clinical Triage Assistant</summary>
+<summary>Example: CloudClinician Clinical Triage Assistant (illustrative — NOT a medical device)</summary>
+
+> ⚠️ **Illustrative example only.** This filled example is for template-shape demonstration and must
+> NOT be taken as regulatory or safety guidance. If your product surfaces diagnosis, treatment or
+> clinical decision support, it may be a **medical device** and subject to EU MDR / FDA SaMD / local
+> rules: obtain a clinical-data strategy, a DPIA, and legal-regulatory review (CE/clearance,
+> human-in-the-loop verification, clinical validation) before building. SDP / Model Armor are
+> security controls — they are **not** regulatory clearance.
 
 ### 1. Problem Statement
 Primary care clinics suffer a 25-minute administrative overhead per patient encounter summarizing unstructured notes and lab reports. CloudClinician provides real-time ambient session summarization and differential diagnosis suggestions directly to physician EHR tabs.
@@ -114,7 +126,8 @@ Primary care clinics suffer a 25-minute administrative overhead per patient enco
 ### 4. NFRs & GCP Stack
 - Latency: < 2500ms end-to-end SOAP delivery.
 - Compute: Cloud Run (Python FastAPI + WebSockets, 1 vCPU, 512MB RAM).
-- AI: Gemini 2.5 Flash with Vertex AI Zero Data Retention agreement.
+- AI: {{GEMINI_MODEL}} on Vertex AI with Zero Data Retention agreement (confirm your project's ZDR
+  entitlement; not assumed).
 - Security: Cloud Key Management Service (KMS) + Google Secret Manager.
 
 </details>
