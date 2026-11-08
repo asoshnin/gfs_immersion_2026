@@ -35,7 +35,8 @@
         "Startup credits usable inside Antigravity",
         "Model Armor + SDP for GDPR health data"
       ],
-      "on_demand_url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session1"
+      "on_demand_url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session1",
+      "codelab_url": "https://codelabs.developers.google.com/codelabs/beyond-vibe-coding-for-the-web?hl=en#2"
     },
     {
       "id": "session_02",
@@ -66,7 +67,8 @@
         "Burst deduplication via pixel/embedding caching",
         "A2A: direct message passing, not shared graph context"
       ],
-      "on_demand_url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day2-session2"
+      "on_demand_url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2",
+      "codelab_url": "https://www.skills.google/focuses/125061?parent=catalog"
     },
     {
       "id": "session_03",
@@ -95,7 +97,8 @@
         "Extension: real Gemini OCR, DLQ, Secret Manager, Eventarc",
         "Walkthrough artifact with pytest verification (11/11 pass)"
       ],
-      "codelab_url": "https://codelabs.developers.google.com/build-and-deploy-gcp-with-antigravity#0"
+      "codelab_url": "https://codelabs.developers.google.com/build-and-deploy-gcp-with-antigravity#0",
+      "on_demand_url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3"
     },
     {
       "id": "session_04",
@@ -124,7 +127,8 @@
         "Mispriced markets & wedge strategy: targeting hidden operational labor pools rather than fighting over defended enterprise software line items",
         "London Phase 2 In-Person Summit: evaluated on 4-week shipping velocity (40%), venture scale (25%), unit economics (20%), and peer engagement (15%)"
       ],
-      "status": "VERIFIED_LIVE"
+      "status": "VERIFIED_LIVE",
+      "on_demand_url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4"
     }
   ],
   "concepts": [
@@ -204,7 +208,15 @@
     },
     {
       "session": "Session 02",
-      "url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day2-session2"
+      "url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2"
+    },
+    {
+      "session": "Session 03",
+      "url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3"
+    },
+    {
+      "session": "Session 04",
+      "url": "https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4"
     }
   ]
 }

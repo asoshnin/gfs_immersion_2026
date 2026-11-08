@@ -132,16 +132,7 @@
         Verified client-side key isolation: provider API key lives in browser <code class="px-1.5 py-0.5 rounded-sm bg-black/10 dark:bg-white/10 font-mono text-accent">localStorage</code> only, never transmitted to our origin. AI responses are generated client-side and verified via <code class="px-1.5 py-0.5 rounded-sm bg-black/10 dark:bg-white/10 font-mono text-accent">/api/ground</code>.
       </div>
 </section>
-<!-- SC-01 SESSION JUMP ROW (replaces the non-functional search box) -->
-<section class="space-y-4">
-<nav class="flex flex-wrap items-center gap-2" aria-label="Jump to session">
-<a class="px-3 py-1.5 rounded-full border border-border bg-surface text-text-secondary hover:border-accent transition-colors duration-150" href="#session-01">01 Prototyping</a>
-<a class="px-3 py-1.5 rounded-full border border-border bg-surface text-text-secondary hover:border-accent transition-colors duration-150" href="#session-02">02 ADK</a>
-<a class="px-3 py-1.5 rounded-full border border-border bg-surface text-text-secondary hover:border-accent transition-colors duration-150" href="#session-03">03 Serverless</a>
-<a class="px-3 py-1.5 rounded-full border border-border bg-surface text-text-secondary hover:border-accent transition-colors duration-150" href="#session-04">04 VC Math</a>
-<span class="text-[11px] font-semibold uppercase tracking-[0.5px] text-text-muted" id="session-count"></span>
-</nav>
-<!-- EXACT TOPIC FILTER PILLS FROM CATALOG.JSON -->
+<!-- SC-01 EXACT TOPIC FILTER PILLS FROM CATALOG.JSON -->
 <div class="flex items-center flex-wrap gap-2 text-[13px]">
 <span class="text-[11px] font-semibold uppercase tracking-[0.5px] text-text-muted mr-1">Filter topic:</span>
 <button class="topic-pill px-3 py-1.5 rounded-md border border-accent bg-accent text-white font-medium transition-colors duration-150" data-topic="all" onclick="filterTopic('all')">
@@ -160,7 +151,6 @@
           Venture Scale &amp; VC Math
         </button>
 </div>
-</section>
 <!-- SC-01 SESSIONS GRID (Content Order: session id → title → meta → summary → highlights → tags → links) -->
 <section class="space-y-4">
 <div class="flex items-center justify-between border-b border-border pb-3">
@@ -213,9 +203,14 @@
 <button class="text-[13px] font-semibold text-accent hover:underline" onclick="openSessionModal('SESSION_01')">
                 View Full Synthesis →
               </button>
+<div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
 <a class="text-[13px] font-semibold text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session1" rel="noopener" target="_blank">
                 Watch On-Demand →
               </a>
+<a class="text-[13px] font-semibold text-accent hover:underline" href="https://codelabs.developers.google.com/codelabs/beyond-vibe-coding-for-the-web?hl=en#2" rel="noopener" target="_blank">
+                Lab: Beyond Vibe Coding →
+              </a>
+</div>
 </div>
 </div>
 </article>
@@ -263,9 +258,14 @@
 <button class="text-[13px] font-semibold text-accent hover:underline" onclick="openSessionModal('SESSION_02')">
                 View Full Synthesis →
               </button>
-<a class="text-[13px] font-semibold text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day2-session2" rel="noopener" target="_blank">
+<div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+<a class="text-[13px] font-semibold text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" rel="noopener" target="_blank">
                 Watch On-Demand →
               </a>
+<a class="text-[13px] font-semibold text-accent hover:underline" href="https://www.skills.google/focuses/125061?parent=catalog" rel="noopener" target="_blank">
+                Lab: Build Multi-Agent Systems with ADK →
+              </a>
+</div>
 </div>
 </div>
 </article>
@@ -312,9 +312,14 @@
 <button class="text-[13px] font-semibold text-accent hover:underline" onclick="openSessionModal('SESSION_03')">
                 View Full Synthesis →
               </button>
+<div class="flex flex-wrap items-center justify-end gap-x-4 gap-y-1">
+<a class="text-[13px] font-semibold text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3" rel="noopener" target="_blank">
+                Watch On-Demand →
+              </a>
 <a class="text-[13px] font-semibold text-accent hover:underline" href="https://codelabs.developers.google.com/build-and-deploy-gcp-with-antigravity#0" rel="noopener" target="_blank">
                 Codelab Guide →
               </a>
+</div>
 </div>
 </div>
 </article>
@@ -361,7 +366,7 @@
 </div>
 <div class="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-[12px]">
 <a class="font-semibold text-accent hover:underline" href="https://goo.gle/session4-slides" rel="noopener" target="_blank">Official Session 4 slides →</a>
-<a class="font-semibold text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day4-session4" rel="noopener" target="_blank">Watch Day 4 recording →</a>
+<a class="font-semibold text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank">Watch Day 4 recording →</a>
 </div>
 <div class="flex items-center justify-between pt-1">
 <button class="text-[13px] font-semibold text-accent hover:underline" onclick="openSessionModal('SESSION_04')">
@@ -420,7 +425,7 @@
 <!-- TAB 5: LAYOUT -->
 <div class="tab-pane hidden space-y-4" id="tab-content-layout"><div class="space-y-4"><div class="p-4 rounded-md border border-border bg-surface"><div class="flex items-center justify-between"><h4 class="text-[15px] font-bold text-text-primary">Standard Cohort 7-Zone Repository Layout</h4><a class="font-mono text-[12px] text-accent hover:underline" href="methodology/structure/folder-layout.md" rel="noopener" target="_blank">folder-layout.md →</a></div><p class="text-[13px] text-text-secondary mt-1">Standardized project directory convention ensuring clean separation of architecture contracts, agent code, cloud infra, and evaluation test suites.</p><p class="text-[11px] text-text-muted mt-1">Derived from Session 01 &amp; 03 — cohort-standard 7-zone repository layout.</p></div><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"><div class="p-3 rounded-md border border-border bg-surface space-y-1"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/01_specs_README.md" rel="noopener" target="_blank">specs/</a><p class="text-[12px] text-text-secondary">Architecture Decision Records (ADRs), interface RFCs, requirements, and system boundary contracts.</p></div><div class="p-3 rounded-md border border-border bg-surface space-y-1"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/02_design_README.md" rel="noopener" target="_blank">design/</a><p class="text-[12px] text-text-secondary">System architecture diagrams, data models, interface wireframes, and schema specifications.</p></div><div class="p-3 rounded-md border border-border bg-surface space-y-1"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/03_src_README.md" rel="noopener" target="_blank">src/</a><p class="text-[12px] text-text-secondary">Core application source code, ADK multi-agent definitions, runtime handlers, and model clients.</p></div><div class="p-3 rounded-md border border-border bg-surface space-y-1"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/04_infra_README.md" rel="noopener" target="_blank">infra/</a><p class="text-[12px] text-text-secondary">Terraform modules, IAM policies, and GCP infrastructure declarations for Cloud Run and Pub/Sub.</p></div><div class="p-3 rounded-md border border-border bg-surface space-y-1"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/05_tests_README.md" rel="noopener" target="_blank">tests/</a><p class="text-[12px] text-text-secondary">Pytest test suites, eval verification harnesses, agent benchmark runs, and synthetic mock fixtures.</p></div><div class="p-3 rounded-md border border-border bg-surface space-y-1"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/06_deploy_README.md" rel="noopener" target="_blank">deploy/</a><p class="text-[12px] text-text-secondary">Container Dockerfiles, Cloud Run configurations, CI/CD pipeline triggers, and operational deploy scripts.</p></div><div class="p-3 rounded-md border border-border bg-surface space-y-1 md:col-span-2 lg:col-span-3"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/07_docs_README.md" rel="noopener" target="_blank">docs/</a><p class="text-[12px] text-text-secondary">Operational runbooks, API specifications, developer onboarding guides, and Antler submission dossiers.</p></div></div></div></div>
 <!-- TAB 6: SCORECARD -->
-<div class="tab-pane hidden space-y-4" id="tab-content-scorecard"><div class="p-5 rounded-md border border-border bg-surface space-y-4"><div class="flex items-center justify-between"><h4 class="text-[16px] font-bold text-text-primary">Round-2 Self-Assessment — Adam French's Three Questions</h4><a class="font-mono text-[12px] text-accent hover:underline" href="methodology/vc/scorecard.html" rel="noopener" target="_blank">scorecard.html →</a></div><p class="text-[13px] text-text-secondary">A self-check based on the three lenses Adam French presented in Session 04. Not an Antler-published rubric.</p><p class="text-[11px] text-text-muted">Derived from Session 04 — VC Math (Adam French, 28 Oct 2026).</p><ul class="space-y-2 list-none"><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">1 · Founder-Market Fit — “Why you?”</div><p class="text-[12px] text-text-secondary mt-1">What is your earned secret, in one sentence?</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">2 · Problem-Solution Fit — “Is it proven?”</div><p class="text-[12px] text-text-secondary mt-1">Name your rung on the ladder of proof, and the next one.</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">3 · Venture Scale — “Return a fund?”</div><p class="text-[12px] text-text-secondary mt-1">What does the wedge grow into — a credible path to hundreds of millions in revenue?</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">4 · Unit-Economics Check — “Fake PMF?”</div><p class="text-[12px] text-text-secondary mt-1">Do your costs grow linearly with revenue? If so, it's fake PMF.</p></li></ul></div></div>
+<div class="tab-pane hidden space-y-4" id="tab-content-scorecard"><div class="p-5 rounded-md border border-border bg-surface space-y-4"><div class="flex items-center justify-between"><h4 class="text-[16px] font-bold text-text-primary">Session 04 Self-Assessment</h4><a class="font-mono text-[12px] text-accent hover:underline" href="methodology/vc/scorecard.html" rel="noopener" target="_blank">Interactive Five-Lenses scorecard →</a></div><p class="text-[13px] text-text-secondary">A self-check inspired by Adam French's Session 04 frameworks (the Three Lenses and the Five Lenses to Make an Idea Bigger). The linked tool implements the <strong>Five Lenses</strong>; the static list below captures the three pre-seed lenses. Not an Antler-published rubric.</p><p class="text-[11px] text-text-muted">Derived from Session 04 — VC Math (Adam French, 28 Oct 2026).</p><ul class="space-y-2 list-none"><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">1 · Founder-Market Fit — “Why you?”</div><p class="text-[12px] text-text-secondary mt-1">What is your earned secret, in one sentence?</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">2 · Problem-Solution Fit — “Is it proven?”</div><p class="text-[12px] text-text-secondary mt-1">Name your rung on the ladder of proof, and the next one.</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">3 · Venture Scale — “Return a fund?”</div><p class="text-[12px] text-text-secondary mt-1">What does the wedge grow into — a credible path to hundreds of millions in revenue?</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">4 · Unit-Economics Check — “Fake PMF?”</div><p class="text-[12px] text-text-secondary mt-1">Do your costs grow linearly with revenue? If so, it's fake PMF.</p></li></ul></div></div>
 </section>
 <!-- SC-04 REGISTRY & EXTERNAL REFERENCES (catalog items + Session 04 official slides; link, don't host) -->
 <section class="space-y-4 pt-4 border-t border-border" id="registry">
@@ -1344,7 +1349,18 @@ python 01_harvester_pipeline/serve.py   # needs the bundled venv/deps</pre><div 
             <li><strong>Model Armor + SDP:</strong> Sensitive Data Protection and Model Armor filtering for GDPR-compliant health data workloads.</li>
           </ul>
           <h4 class="font-bold text-text-primary text-[15px] mt-4">Top Questions</h4>
-          <p class="text-[12px] text-text-muted">No public Q&A was published for this session.</p>
+          <p class="text-[12px] text-text-muted">Culled from the public Cloud OnAir Q&amp;A (Toby Knight, Fabian Desnoes). Traceable to the <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session1" rel="noopener" target="_blank">Day 1 recording</a>.</p>
+          <ul class="list-disc list-inside space-y-1.5">
+            <li><strong>Slides?</strong> Not shared — the on-demand recording is the record of the session.</li>
+            <li><strong>Deploying AI-generated code safely</strong> — keep secrets out of the repo (Secret Manager + an allow-list deploy so a <code>.env</code> can never slip through); run under its own least-privilege service account and verify the public URL returns 403; pin dependencies and run <code>pip/npm audit</code>; have a fresh, separate session review the plan as a “goldfish critic” <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session1" rel="noopener" target="_blank"><em>(community)</em></a>.</li>
+            <li><strong>Can the Antigravity CLI run security audits?</strong> Yes — prompt the agent to grill the critical points of your app/infra and use a frontier model; Gemini 4 Argon has proven strong results. Gemini 3.8 Flash Cyber is available via the <a class="text-accent hover:underline" href="https://deepmind.google/fairwind-program/" rel="noopener" target="_blank">Fairwind program</a> <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session1" rel="noopener" target="_blank"><em>(moderator)</em></a>.</li>
+            <li><strong>50% quota discount</strong> on Gemini 3.7/3.8 Flash applies to <em>all</em> API traffic, not just inside Antigravity <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session1" rel="noopener" target="_blank"><em>(moderator)</em></a>.</li>
+            <li><strong>Non-determinism at temperature zero</strong> — temperature is being removed on newer models (reasoning is the new norm); Gemini has a default request cache that raises determinism for close-together calls <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session1" rel="noopener" target="_blank"><em>(moderator)</em></a>.</li>
+            <li><strong>Multi-model + multi-cloud</strong> — the Antigravity SDK runs with non-Gemini models and outside Google Cloud; see <a class="text-accent hover:underline" href="https://antigravity.google/docs/sdk/overview" rel="noopener" target="_blank">antigravity.google/docs/sdk</a> <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session1" rel="noopener" target="_blank"><em>(community)</em></a>.</li>
+          </ul>
+          <div class="pt-3">
+            <a href="https://codelabs.developers.google.com/codelabs/beyond-vibe-coding-for-the-web?hl=en#2" target="_blank" rel="noopener" class="text-accent font-semibold hover:underline">Lab: Beyond Vibe Coding — Prototyping with AI Studio &amp; Antigravity &rarr;</a>
+          </div>
           <div class="pt-3">
             <a href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session1" target="_blank" rel="noopener" class="text-accent font-semibold hover:underline">Watch Day 1 Recording on Cloud OnAir &rarr;</a>
           </div>
@@ -1367,9 +1383,24 @@ python 01_harvester_pipeline/serve.py   # needs the bundled venv/deps</pre><div 
             <li><strong>A2A Protocol:</strong> Direct point-to-point message passing without bloated shared graph context.</li>
           </ul>
           <h4 class="font-bold text-text-primary text-[15px] mt-4">Top Questions</h4>
-          <p class="text-[12px] text-text-muted">No public Q&A was published for this session.</p>
+          <p class="text-[12px] text-text-muted">Culled from the public Cloud OnAir Q&amp;A (Mauricio Arrechea, Fabian Desnoes). Traceable to the <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" rel="noopener" target="_blank">Day 2 recording</a>.</p>
+          <ul class="list-disc list-inside space-y-1.5">
+            <li><strong>Self-healing on failure</strong> — ADK pipes schema-validation errors and stack traces back into the model context for an immediate conversational self-correction loop, so standard failure modes need no custom fallback routing <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" rel="noopener" target="_blank"><em>(moderator)</em></a>.</li>
+            <li><strong>Turn a customer failure into a test</strong> — use session serialization + time-travel replay to re-run the exact trajectory, tool responses and intermediate state in your suite <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" rel="noopener" target="_blank"><em>(moderator)</em></a>.</li>
+            <li><strong>Hard token budget per tenant</strong> — enforce GCP-level spend caps or Agent Gateway limits that stop the agent mid-run <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" rel="noopener" target="_blank"><em>(Fabian Desnoes)</em></a>.</li>
+            <li><strong>100+ tools</strong> — split the catalog into specialized domain sub-agents behind a top-level router for traceability; a monolithic 100-tool catalog makes wrong-tool picks nearly impossible to debug <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" rel="noopener" target="_blank"><em>(Fabian Desnoes)</em></a>.</li>
+            <li><strong>Human-in-the-loop mid-run</strong> — use tool-confirmation hooks + externalized session persistence: serialize the snapshot, suspend (freeing compute), then rehydrate when a webhook signals approval <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" rel="noopener" target="_blank"><em>(moderator)</em></a>.</li>
+            <li><strong>Dynamic model routing</strong> — configure policies so high-frequency tool selection runs on Flash and escalates to Pro for deep synthesis (developer-defined, not guessed) <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" rel="noopener" target="_blank"><em>(moderator)</em></a>.</li>
+            <li><strong>Evals in CI</strong> — the Eval tab test cases run headlessly via ADK CLI/SDK in CI/CD to catch routing regressions on each prompt/model change <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" rel="noopener" target="_blank"><em>(moderator)</em></a>.</li>
+            <li><strong>Context caching</strong> — register large stable context (system prompts, codebase snapshots) as cached tokens; break-even after ~2–4 queries for &gt;32K-token prompts <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" rel="noopener" target="_blank"><em>(Mauricio Arrechea)</em></a>.</li>
+            <li><strong>Non-Google models</strong> — ADK has a modular model-provider interface, so you can orchestrate non-Google or open-weight models like Gemma <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" rel="noopener" target="_blank"><em>(Mauricio Arrechea)</em></a>.</li>
+            <li><strong>Runs fully locally</strong> — ADK supports full agent execution, interactive debugging and local state without any GCP deployment <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" rel="noopener" target="_blank"><em>(Mauricio Arrechea)</em></a>.</li>
+          </ul>
           <div class="pt-3">
-            <a href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day2-session2" target="_blank" rel="noopener" class="text-accent font-semibold hover:underline">Watch Day 2 Recording on Cloud OnAir &rarr;</a>
+            <a href="https://www.skills.google/focuses/125061?parent=catalog" target="_blank" rel="noopener" class="text-accent font-semibold hover:underline">Lab: Build Multi-Agent Systems with ADK (Google Skills) &rarr;</a>
+          </div>
+          <div class="pt-3">
+            <a href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day3-session2" target="_blank" rel="noopener" class="text-accent font-semibold hover:underline">Watch Day 2 Recording on Cloud OnAir &rarr;</a>
           </div>
         `
       },
@@ -1389,9 +1420,23 @@ python 01_harvester_pipeline/serve.py   # needs the bundled venv/deps</pre><div 
             <li><strong>Pytest Verification:</strong> Comprehensive test artifact with all 11 unit tests passing.</li>
           </ul>
           <h4 class="font-bold text-text-primary text-[15px] mt-4">Top Questions</h4>
-          <p class="text-[12px] text-text-muted">No public Q&A was published for this session.</p>
+          <p class="text-[12px] text-text-muted">Culled from the public Cloud OnAir Q&amp;A (Zack Akil, Fabian Desnoes, Mauricio Arrechea). Traceable to the <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3" rel="noopener" target="_blank">Day 3 recording</a>.</p>
+          <ul class="list-disc list-inside space-y-1.5">
+            <li><strong>Reliability on spiky / low-bandwidth traffic</strong> — set scaling, retries and timeouts first; for jobs &gt;15 min use Cloud Run retries with a re-connecting client, or switch to Cloud Run Jobs <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3" rel="noopener" target="_blank"><em>(Fabian Desnoes)</em></a>.</li>
+            <li><strong>Cloud Run concurrency</strong> — up to 250 concurrent requests per instance and ~1,000 instances by default, so tens of thousands of concurrent tasks are feasible subject to CPU/GPU quotas <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3" rel="noopener" target="_blank"><em>(moderator)</em></a>.</li>
+            <li><strong>Gemini 429 rate-limit handling</strong> — put Cloud Tasks or Pub/Sub with rate limiting in front of Cloud Run to queue asynchronously, throttle to your exact Gemini limits, and retry with exponential backoff <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3" rel="noopener" target="_blank"><em>(Mauricio Arrechea)</em></a>.</li>
+            <li><strong>Cold starts for GPU/agents</strong> — keep a low-cost front Cloud Run and spin the heavy GPU/API instance on demand so it boots while the user is interacting <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3" rel="noopener" target="_blank"><em>(community)</em></a>.</li>
+            <li><strong>Security controls for regulated (fintech) pipelines</strong> — VPC Service Controls for strict perimeters + Private Service Connect so Cloud Run↔Vertex AI↔BigQuery never traverse the public internet, plus Customer-Managed Encryption Keys via Cloud KMS <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3" rel="noopener" target="_blank"><em>(moderator)</em></a>.</li>
+            <li><strong>Data residency (UK/EU GDPR)</strong> — the <em>global</em> Gemini location can process data outside the UK/EU; pin region-specific models (e.g. Gemini 4 Argon and 3.5 Flash are UK-deployed) or the EU multi-region <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3" rel="noopener" target="_blank"><em>(Mauricio Arrechea)</em></a>.</li>
+            <li><strong>Arabic / complex-script text in generated images</strong> — use a compositing pipeline: generate the background without text, then programmatically overlay SSR text with correct fonts/diacritics <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3" rel="noopener" target="_blank"><em>(moderator)</em></a>.</li>
+            <li><strong>Always-on agent team without 24/7 compute</strong> — combine event-driven Cloud Run (scales to zero) with persistent state in BigQuery/Firestore <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3" rel="noopener" target="_blank"><em>(Mauricio Arrechea)</em></a>.</li>
+            <li><strong>Antigravity-generated infra</strong> — audit generated code before deploy for invalid config and over-broad IAM before applying it <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3" rel="noopener" target="_blank"><em>(community)</em></a>.</li>
+          </ul>
           <div class="pt-3">
             <a href="https://codelabs.developers.google.com/build-and-deploy-gcp-with-antigravity#0" target="_blank" rel="noopener" class="text-accent font-semibold hover:underline">Open Official Antigravity Codelab Guide &rarr;</a>
+          </div>
+          <div class="pt-3">
+            <a href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session3" target="_blank" rel="noopener" class="text-accent font-semibold hover:underline">Watch Day 3 Recording on Cloud OnAir &rarr;</a>
           </div>
         `
       },
@@ -1419,17 +1464,17 @@ python 01_harvester_pipeline/serve.py   # needs the bundled venv/deps</pre><div 
           <h4 class="font-bold text-text-primary text-[15px] mt-4">Case Studies</h4>
           <p>Scalable Capital (€1.5bn valuation 2025) · Capsa AI ($18M Series A, 122%+ NDR) · Lovable ($600M+ ARR) · Peec AI ($10M ARR).</p>
           <h4 class="font-bold text-text-primary text-[15px] mt-4">Antler Answers — Session 4 Q&amp;A</h4>
-          <p class="text-[12px] text-text-muted">Paraphrased from the session Q&amp;A, attributed to the Antler moderators. Traceable to the public <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day4-session4" rel="noopener" target="_blank">Day 4 recording</a>.</p>
+          <p class="text-[12px] text-text-muted">Paraphrased from the session Q&amp;A, attributed to the Antler moderators. Traceable to the public <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank">Day 4 recording</a>.</p>
           <ul class="list-disc list-inside space-y-1.5">
-            <li><strong>Paid pilots vs free trials</strong> — push for paid, even nominal (£5–10k); money forces procurement and proves urgency <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day4-session4" rel="noopener" target="_blank"><em>(Richard Baillie)</em></a>.</li>
-            <li><strong>Moat at pre-seed</strong> — distribution first, then proprietary data; orchestration alone is the easiest layer to copy <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day4-session4" rel="noopener" target="_blank"><em>(Richard Baillie)</em></a>.</li>
-            <li><strong>Red flag</strong> — when the buyer's internal team wants to build it themselves <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day4-session4" rel="noopener" target="_blank"><em>(Bazil Azmil)</em></a>.</li>
-            <li><strong>Market sizing</strong> — bottom-up; hidden labour spend, cheaper-making, or wedge into an adjacent budget; the test is a credible route to $100M+ revenue without heroic assumptions <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day4-session4" rel="noopener" target="_blank"><em>(Richard Baillie)</em></a>.</li>
-            <li><strong>Solo founders</strong> — Antler primarily backs teams; backs solo founders only in exceptional cases, with a plan to add co-founders <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day4-session4" rel="noopener" target="_blank"><em>(Bazil Azmil)</em></a>.</li>
-            <li><strong>How to reach Antler</strong> — antler.co/apply / antler.co/pitch <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day4-session4" rel="noopener" target="_blank"><em>(Richard Baillie)</em></a>.</li>
+            <li><strong>Paid pilots vs free trials</strong> — push for paid, even nominal (£5–10k); money forces procurement and proves urgency <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Richard Baillie)</em></a>.</li>
+            <li><strong>Moat at pre-seed</strong> — distribution first, then proprietary data; orchestration alone is the easiest layer to copy <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Richard Baillie)</em></a>.</li>
+            <li><strong>Red flag</strong> — when the buyer's internal team wants to build it themselves <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Bazil Azmil)</em></a>.</li>
+            <li><strong>Market sizing</strong> — bottom-up; hidden labour spend, cheaper-making, or wedge into an adjacent budget; the test is a credible route to $100M+ revenue without heroic assumptions <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Richard Baillie)</em></a>.</li>
+            <li><strong>Solo founders</strong> — Antler primarily backs teams; backs solo founders only in exceptional cases, with a plan to add co-founders <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Bazil Azmil)</em></a>.</li>
+            <li><strong>How to reach Antler</strong> — antler.co/apply / antler.co/pitch <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Richard Baillie)</em></a>.</li>
           </ul>
           <h4 class="font-bold text-text-primary text-[15px] mt-4">Official Resources</h4>
-          <p><a class="text-accent hover:underline" href="https://goo.gle/session4-slides" rel="noopener" target="_blank">Session 4 slides</a> · <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day4-session4" rel="noopener" target="_blank">Day 4 recording</a> · <a class="text-accent hover:underline" href="https://goo.gle/session4_feedback" rel="noopener" target="_blank">Feedback</a></p>
+          <p><a class="text-accent hover:underline" href="https://goo.gle/session4-slides" rel="noopener" target="_blank">Session 4 slides</a> · <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank">Day 4 recording</a> · <a class="text-accent hover:underline" href="https://goo.gle/session4_feedback" rel="noopener" target="_blank">Feedback</a></p>
         `
       }
     };
