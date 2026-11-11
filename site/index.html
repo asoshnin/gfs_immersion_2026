@@ -14,6 +14,17 @@
 <!-- Self-hosted Tailwind CSS (compiled from the same config below) — no third-party CDN dependency -->
 <link rel="stylesheet" href="compiled.css?v=20261106-local1">
 <style>
+    /* Sprint 24: enlarged assistant panel for focused work. */
+    #chat-panel.expanded {
+      width: min(96vw, 1100px) !important;
+      max-height: 92vh !important;
+      height: 92vh;
+      bottom: 12px !important;
+      right: 12px !important;
+    }
+    @media (max-width: 640px) {
+      #chat-panel.expanded { width: 96vw !important; height: 88vh; }
+    }
     :root {
       --bg-canvas: #F8FAFC;
       --bg-surface: #FFFFFF;
@@ -57,8 +68,29 @@
       border-radius: 4px;
     }
   </style>
+  <!-- Sprint 17: shared provider-adaptive generation config -->
+  <script type="module">
+    import * as ProviderConfig from './assets/provider-config.js?v=57d956a1';
+    window.ProviderConfig = ProviderConfig;
+    import * as WebSearch from './assets/provider-websearch.js?v=c25b4708';
+    window.WebSearch = WebSearch;
+    import * as MdLite from './assets/markdown-lite.js?v=a696d783';
+    window.MdLite = MdLite;
+    MdLite.ensureMarkdownStyles();
+    import * as ExcerptModal from './assets/excerpt-modal.js?v=67f8b15e';
+    window.ExcerptModal = ExcerptModal;
+    import './assets/provider-websearch-guide.js?v=7eab1089';
+  </script>
 </head>
 <body class="transition-colors duration-200">
+<script type="module">
+  import { ensureSettingsModal, populateCseFields } from './assets/settings-modal.js?v=969d2b16';
+  ensureSettingsModal();
+  // Bridge the module-scoped helper to the classic script that owns
+  // openSettingsModal() — modules don't leak their bindings to inline handlers.
+  window.GFS_populateCseFields = populateCseFields;
+</script>
+
 <!-- TOP WORDMARK: portal's own identity + always-visible Unofficial badge (doc 06 D-02/D-03). No Google/Antler marks. -->
 <header class="max-w-[1440px] mx-auto px-6 md:px-12 pt-8 pb-4"><div class="flex items-center justify-between">
 <div class="flex items-center gap-2.5 select-none">
@@ -338,17 +370,17 @@
               <span class="font-medium text-text-primary">Speakers:</span> Adam French (Antler UK)
             </div>
 <p class="text-[14px] leading-[1.6] text-text-secondary">
-              Adam French (Partner, Antler UK; co-founder of Scalable Capital) walks through the three lenses Antler applies at pre-seed — Founder-Market Fit (why you?), Problem-Solution Fit (is the problem real and proven?), and Venture Scale (could this return a fund?) — plus the ladder of proof, the Five Lenses to make an idea bigger, and PMF/retention benchmarks.
+              Adam French (Partner, Antler UK; co-founder of Scalable Capital) decodes early-stage venture math: Antler's Five Lenses to Make an Idea Bigger (10× More Places · Replace Legacy · Market Standard · 10× More Differentiated · Beat Competition), unit economics under inference token costs, and the pre-seed defensibility hierarchy. The linked scorecard and AI coach implement the Five Lenses.
             </p>
 <div class="space-y-1.5 pt-2">
 <div class="text-[11px] font-semibold uppercase tracking-[0.5px] text-text-muted">Key Highlights:</div>
 <ul class="text-[13px] text-text-secondary space-y-1 list-disc list-inside">
-<li class="">Three lenses: Founder-Market Fit · Problem-Solution Fit · Venture Scale</li>
-<li class="">The ladder of proof — name your rung, and the next one</li>
-<li class="">Five Lenses to make an idea bigger (with real company examples)</li>
-<li class="">Evidence 2×2: Proceed / Pivot / Stop</li>
-<li class="">Why now: inference ~280× cheaper in two years</li>
-<li class="">PMF &amp; retention: the Sean Ellis 40% bar</li>
+<li class="">The Five Lenses to Make an Idea Bigger: 10× More Places · Replace Legacy · Market Standard · 10× More Differentiated · Beat Competition</li>
+<li class="">Inference gross-margin guardrail: target ≥75% gross margin for agentic workflows; unoptimised frontier-token inference can collapse it to ~30%</li>
+<li class="">Pre-seed defensibility hierarchy: Customer Distribution &gt; Proprietary Domain Data &gt; Regulatory Moat &gt; Agent Orchestration &gt; Prompt Wrappers</li>
+<li class="">Solo-founder underwriting: Antler primarily backs teams; solo technical founders only in exceptional cases</li>
+<li class="">Mispriced markets &amp; the wedge: target hidden operational labour spend rather than fight an incumbent budget</li>
+<li class="">Sean Ellis 40% "very disappointed" bar for product/market fit</li>
 </ul>
 </div>
 </div>
@@ -360,8 +392,8 @@
 <span class="text-[11px] px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary">#Pre-Seed</span>
 <span class="text-[11px] px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary">#Antler</span>
 <span class="text-[11px] px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary">#London Phase 2</span>
-<span class="text-[11px] px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary">#Ladder of Proof</span>
-<span class="text-[11px] px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary">#Founder-Market Fit</span>
+<span class="text-[11px] px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary">#Defensibility</span>
+<span class="text-[11px] px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary">#Unit Economics</span>
 <span class="text-[11px] px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary">#PMF</span>
 </div>
 <div class="flex flex-wrap items-center gap-x-4 gap-y-1 pt-1 text-[12px]">
@@ -380,6 +412,18 @@
 </article>
 </div>
 </section>
+<!-- Sprint 17: AI Venture Coach hero card -->
+<section class="p-5 rounded-lg border border-accent/40 bg-accent-tint" id="coach-hero">
+<div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+<div>
+<h2 class="text-[20px] font-bold text-text-primary">🎯 AI Venture Coach</h2>
+<p class="text-[14px] text-text-secondary mt-1">
+            Pressure-test your startup against Adam French’s Five Lenses. BYO key — your API key and uploaded documents never leave this browser.
+          </p>
+</div>
+<a class="px-4 py-2 rounded-md bg-accent hover:bg-accent-hover text-white text-[13px] font-semibold transition-colors" href="methodology/vc/ai-coach.html">Open AI Venture Coach →</a>
+</div>
+</section>
 <!-- SC-03 METHODOLOGY KIT TABS SECTION (Exact 6 Tabs) -->
 <section class="space-y-6 pt-4 border-t border-border">
 <div class="space-y-1">
@@ -393,7 +437,7 @@
           Document templates, bootstrapper scripts, Antigravity patterns, ADK recipes, and readiness scorecards built for venture-scale GCP founders.
         </p>
 </div>
-<!-- 6-TAB SEGMENTED PILLS -->
+<!-- 7-TAB SEGMENTED PILLS (Sprint 17: added AI Venture Coach) -->
 <div class="flex items-center gap-1.5 overflow-x-auto pb-2 border-b border-border text-[13px] custom-scroll">
 <button class="tab-btn px-3 py-2 rounded-md font-medium border border-accent bg-accent text-white whitespace-nowrap transition-colors" id="tab-btn-templates" onclick="switchTab('templates')">
           Document Templates
@@ -410,6 +454,9 @@
 <button class="tab-btn px-3 py-2 rounded-md font-medium border border-border bg-surface text-text-secondary hover:border-accent whitespace-nowrap transition-colors" id="tab-btn-layout" onclick="switchTab('layout')">
           Architecture Layouts
         </button>
+<button class="tab-btn px-3 py-2 rounded-md font-medium border border-border bg-surface text-text-secondary hover:border-accent whitespace-nowrap transition-colors" id="tab-btn-coach" onclick="switchTab('coach')">
+          AI Venture Coach
+        </button>
 <button class="tab-btn px-3 py-2 rounded-md font-medium border border-border bg-surface text-text-secondary hover:border-accent whitespace-nowrap transition-colors" id="tab-btn-scorecard" onclick="switchTab('scorecard')">
           Readiness Scorecard
         </button>
@@ -424,8 +471,10 @@
 <div class="tab-pane hidden space-y-4" id="tab-content-adk"><div class="space-y-4"><div class="p-4 rounded-md border border-border bg-surface"><h4 class="text-[15px] font-bold text-text-primary">ADK Production Topology Starters</h4><p class="text-[13px] text-text-secondary mt-1">Official starters based on Google's Agent Development Kit (Mauricio Arrechea &amp; Fabian Desnoes, Session 02) with state reconciliation and tool gating.</p><p class="text-[11px] text-text-muted mt-1">Derived from Session 02 (Mauricio Arrechea &amp; Fabian Desnoes, 23 Oct 2026).</p></div><div class="grid grid-cols-1 md:grid-cols-2 gap-4"><div class="p-4 rounded-md border border-border bg-surface space-y-2"><div class="flex items-center justify-between"><a class="font-mono font-bold text-[13px] text-accent hover:underline" href="methodology/adk/sequential_agent_starter.py" rel="noopener" target="_blank">sequential_agent_starter.py</a><span class="text-[11px] font-semibold text-text-muted">Pattern 1</span></div><p class="text-[13px] text-text-secondary">Linear step-by-step pipeline execution passing typed session state forward with deterministic validation gates between transitions.</p><div class="text-[11px] font-mono text-text-muted">Topologies: Linear • Stateful • Guarded</div></div><div class="p-4 rounded-md border border-border bg-surface space-y-2"><div class="flex items-center justify-between"><a class="font-mono font-bold text-[13px] text-accent hover:underline" href="methodology/adk/loop_agent_starter.py" rel="noopener" target="_blank">loop_agent_starter.py</a><span class="text-[11px] font-semibold text-text-muted">Pattern 2</span></div><p class="text-[13px] text-text-secondary">Iterative convergence and validation loop agent with hard iteration bounds, criteria evaluators, and backtrack support.</p><div class="text-[11px] font-mono text-text-muted">Topologies: Cyclic • Self-Refining • Bounded</div></div><div class="p-4 rounded-md border border-border bg-surface space-y-2"><div class="flex items-center justify-between"><a class="font-mono font-bold text-[13px] text-accent hover:underline" href="methodology/adk/parallel_agent_starter.py" rel="noopener" target="_blank">parallel_agent_starter.py</a><span class="text-[11px] font-semibold text-text-muted">Pattern 3</span></div><p class="text-[13px] text-text-secondary">Concurrent sub-agent dispatch and fan-in result aggregation utilizing LongRunningFunctionTool for async execution.</p><div class="text-[11px] font-mono text-text-muted">Topologies: Fan-out • Concurrent • Fan-in</div></div><div class="p-4 rounded-md border border-border bg-surface space-y-2"><div class="flex items-center justify-between"><a class="font-mono font-bold text-[13px] text-accent hover:underline" href="methodology/adk/hierarchical_agent_starter.py" rel="noopener" target="_blank">hierarchical_agent_starter.py</a><span class="text-[11px] font-semibold text-text-muted">Pattern 4</span></div><p class="text-[13px] text-text-secondary">Supervisor agent orchestrating specialized sub-agents with A2A protocol point-to-point messaging and centralized token spend caps.</p><div class="text-[11px] font-mono text-text-muted">Topologies: Supervisor • Delegation • A2A</div></div></div></div></div>
 <!-- TAB 5: LAYOUT -->
 <div class="tab-pane hidden space-y-4" id="tab-content-layout"><div class="space-y-4"><div class="p-4 rounded-md border border-border bg-surface"><div class="flex items-center justify-between"><h4 class="text-[15px] font-bold text-text-primary">Standard Cohort 7-Zone Repository Layout</h4><a class="font-mono text-[12px] text-accent hover:underline" href="methodology/structure/folder-layout.md" rel="noopener" target="_blank">folder-layout.md →</a></div><p class="text-[13px] text-text-secondary mt-1">Standardized project directory convention ensuring clean separation of architecture contracts, agent code, cloud infra, and evaluation test suites.</p><p class="text-[11px] text-text-muted mt-1">Derived from Session 01 &amp; 03 — cohort-standard 7-zone repository layout.</p></div><div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"><div class="p-3 rounded-md border border-border bg-surface space-y-1"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/01_specs_README.md" rel="noopener" target="_blank">specs/</a><p class="text-[12px] text-text-secondary">Architecture Decision Records (ADRs), interface RFCs, requirements, and system boundary contracts.</p></div><div class="p-3 rounded-md border border-border bg-surface space-y-1"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/02_design_README.md" rel="noopener" target="_blank">design/</a><p class="text-[12px] text-text-secondary">System architecture diagrams, data models, interface wireframes, and schema specifications.</p></div><div class="p-3 rounded-md border border-border bg-surface space-y-1"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/03_src_README.md" rel="noopener" target="_blank">src/</a><p class="text-[12px] text-text-secondary">Core application source code, ADK multi-agent definitions, runtime handlers, and model clients.</p></div><div class="p-3 rounded-md border border-border bg-surface space-y-1"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/04_infra_README.md" rel="noopener" target="_blank">infra/</a><p class="text-[12px] text-text-secondary">Terraform modules, IAM policies, and GCP infrastructure declarations for Cloud Run and Pub/Sub.</p></div><div class="p-3 rounded-md border border-border bg-surface space-y-1"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/05_tests_README.md" rel="noopener" target="_blank">tests/</a><p class="text-[12px] text-text-secondary">Pytest test suites, eval verification harnesses, agent benchmark runs, and synthetic mock fixtures.</p></div><div class="p-3 rounded-md border border-border bg-surface space-y-1"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/06_deploy_README.md" rel="noopener" target="_blank">deploy/</a><p class="text-[12px] text-text-secondary">Container Dockerfiles, Cloud Run configurations, CI/CD pipeline triggers, and operational deploy scripts.</p></div><div class="p-3 rounded-md border border-border bg-surface space-y-1 md:col-span-2 lg:col-span-3"><a class="font-mono text-accent font-bold text-[13px] hover:underline" href="methodology/structure/zone-readmes/07_docs_README.md" rel="noopener" target="_blank">docs/</a><p class="text-[12px] text-text-secondary">Operational runbooks, API specifications, developer onboarding guides, and Antler submission dossiers.</p></div></div></div></div>
-<!-- TAB 6: SCORECARD -->
-<div class="tab-pane hidden space-y-4" id="tab-content-scorecard"><div class="p-5 rounded-md border border-border bg-surface space-y-4"><div class="flex items-center justify-between"><h4 class="text-[16px] font-bold text-text-primary">Session 04 Self-Assessment</h4><a class="font-mono text-[12px] text-accent hover:underline" href="methodology/vc/scorecard.html" rel="noopener" target="_blank">Interactive Five-Lenses scorecard →</a><a class="font-mono text-[12px] text-accent hover:underline ml-3" href="methodology/vc/ai-coach.html" rel="noopener" target="_blank">Open AI Venture Coach →</a></div><p class="text-[13px] text-text-secondary">A self-check inspired by Adam French's Session 04 frameworks (the Three Lenses and the Five Lenses to Make an Idea Bigger). The linked tool implements the <strong>Five Lenses</strong>; the static list below captures the three pre-seed lenses. Not an Antler-published rubric.</p><p class="text-[11px] text-text-muted">Derived from Session 04 — VC Math (Adam French, 28 Oct 2026).</p><ul class="space-y-2 list-none"><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">1 · Founder-Market Fit — “Why you?”</div><p class="text-[12px] text-text-secondary mt-1">What is your earned secret, in one sentence?</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">2 · Problem-Solution Fit — “Is it proven?”</div><p class="text-[12px] text-text-secondary mt-1">Name your rung on the ladder of proof, and the next one.</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">3 · Venture Scale — “Return a fund?”</div><p class="text-[12px] text-text-secondary mt-1">What does the wedge grow into — a credible path to hundreds of millions in revenue?</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">4 · Unit-Economics Check — “Fake PMF?”</div><p class="text-[12px] text-text-secondary mt-1">Do your costs grow linearly with revenue? If so, it's fake PMF.</p></li></ul></div></div>
+<!-- TAB 6: AI VENTURE COACH -->
+<div class="tab-pane hidden space-y-4" id="tab-content-coach"><div class="p-5 rounded-md border border-accent/40 bg-accent-tint flex flex-col md:flex-row items-start md:items-center justify-between gap-3"><div class="space-y-1"><h4 class="text-[16px] font-bold text-text-primary">🎯 AI Venture Coach</h4><p class="text-[13px] text-text-secondary">Pressure-test your startup against Adam French’s Five Lenses. BYO key — nothing leaves this browser.</p></div><a class="px-3 py-1.5 rounded-md bg-accent hover:bg-accent-hover text-white text-[13px] font-semibold transition-colors" href="methodology/vc/ai-coach.html">Open AI Venture Coach →</a></div><div class="p-4 rounded-md border border-border bg-surface"><p class="text-[12px] text-text-secondary">Self-assessment aid only. Not endorsed by Antler or Google. The Five Lenses framework is derived from Session 04 (Adam French, 28 Oct 2026).</p><a class="font-mono text-[12px] text-accent hover:underline" href="methodology/vc/scorecard.html" rel="noopener" target="_blank">Interactive Five-Lenses scorecard →</a></div></div>
+<!-- TAB 7: SCORECARD -->
+<div class="tab-pane hidden space-y-4" id="tab-content-scorecard"><div class="p-5 rounded-md border border-border bg-surface space-y-4"><div class="flex items-center justify-between"><h4 class="text-[16px] font-bold text-text-primary">Session 04 Self-Assessment</h4><a class="font-mono text-[12px] text-accent hover:underline" href="methodology/vc/scorecard.html" rel="noopener" target="_blank">Interactive Five-Lenses scorecard →</a><a class="font-mono text-[12px] text-accent hover:underline ml-3" href="methodology/vc/ai-coach.html" rel="noopener" target="_blank">Open AI Venture Coach →</a></div><p class="text-[13px] text-text-secondary">A self-check inspired by Adam French's Session 04 frameworks. The linked <strong>interactive scorecard</strong> and <strong>AI Venture Coach</strong> implement the <strong>Five Lenses to Make an Idea Bigger</strong>, and the list below mirrors them. Not an Antler-published rubric.</p><p class="text-[11px] text-text-muted">Derived from Session 04 — VC Math (Adam French, 28 Oct 2026).</p><ul class="space-y-2 list-none"><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">1 · 10× More Places</div><p class="text-[12px] text-text-secondary mt-1">Can the core engine solve adjacent high-value problems without a total rewrite?</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">2 · Replace Legacy</div><p class="text-[12px] text-text-secondary mt-1">Are you replacing manual labour and organisational friction, not just competing with a software line item?</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">3 · Market Standard</div><p class="text-[12px] text-text-secondary mt-1">Can your architecture define the industry's canonical protocol, benchmark or data standard?</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">4 · 10× More Differentiated</div><p class="text-[12px] text-text-secondary mt-1">What stops a frontier lab or a 5-person fast-follower copying this next month? The moat must be structural, not linguistic.</p></li><li class="p-4 rounded border border-border space-y-1"><div class="text-[11px] font-bold uppercase text-text-primary">5 · Beat Competition</div><p class="text-[12px] text-text-secondary mt-1">Can the team out-ship a traditional 20-person engineering organisation?</p></li></ul></div></div>
 </section>
 <!-- SC-04 REGISTRY & EXTERNAL REFERENCES (catalog items + Session 04 official slides; link, don't host) -->
 <section class="space-y-4 pt-4 border-t border-border" id="registry">
@@ -475,24 +524,23 @@
 <a class="p-4 rounded-md border border-border bg-surface hover:border-accent transition-colors space-y-2 block" href="https://goo.gle/session4-slides" rel="noopener" target="_blank">
 <span class="text-[11px] font-bold uppercase tracking-[0.5px] text-accent">SLIDES</span>
 <h4 class="text-[15px] font-bold text-text-primary">Session 4 — Decoding VC Math (Official Slides)</h4>
-<p class="text-[12px] text-text-secondary">Adam French's official Session 04 deck on founder-market fit, problem-solution fit, and venture scale. Linked, not hosted.</p>
+<p class="text-[12px] text-text-secondary">Adam French's official Session 04 deck on the Five Lenses to make an idea bigger, unit economics under inference costs, and the pre-seed defensibility hierarchy. Linked, not hosted.</p>
 <div class="text-[11px] font-mono text-accent pt-1">goo.gle/session4-slides →</div>
 </a>
 </div>
 </section><section class="space-y-4 pt-4 border-t border-border" id="mcp-server"><div class="space-y-1"><div class="flex items-center justify-between"><div class="flex items-center gap-2"><h2 class="text-[22px] font-bold tracking-[-0.45px] text-text-primary">Model Context Protocol Server</h2><span class="text-[11px] font-bold uppercase tracking-[0.5px] px-2 py-0.5 rounded-sm bg-accent-tint text-accent border border-accent/30">Runnable — local + cloud</span></div><span class="text-[11px] font-semibold uppercase tracking-[0.5px] text-text-muted">BYO-key · private plane</span></div><div class="text-[13px] font-medium text-accent">Run it yourself — stdio, streamable-http, or SSE</div><p class="text-[14px] text-text-secondary leading-[1.6]">The gfs-mcp server is a <strong>runnable</strong> Model Context Protocol server: run it on your own machine, or call a deployed instance on the cloud — with your own model + API key (BYO-key). It exposes four tools: three read-only retrieval tools plus a generated advisor. The advisor grounds on the Immersion knowledge base, then answers with <strong>your</strong> provider key. No key is ever stored server-side, and your key + prompt never touch our origin.</p><div class="p-4 rounded-md border border-border bg-surface space-y-2"><div class="flex items-center justify-between"><span class="text-[11px] font-bold uppercase tracking-[0.5px] text-accent">Run locally (developer)</span><span class="text-[10px] font-bold uppercase tracking-[0.5px] text-accent">stdio · http · sse</span></div><pre class="p-3 rounded-md bg-black/90 text-[#34A853] font-mono text-[12px] overflow-x-auto"># one-line local launch (from the gfs_immersion_hub project root)
-python 01_harvester_pipeline/serve.py                   # stdio (client spawns it)
-python 01_harvester_pipeline/serve.py --transport streamable-http --port 8900   # hosted HTTP
-python 01_harvester_pipeline/serve.py --transport sse --port 8900                # SSE</pre><div class="text-[12px] text-text-secondary space-y-1"><p>Example MCP client config (Claude Desktop / OpenClaw / compatible client):</p><pre class="p-3 rounded-md bg-black/90 text-[#34A853] font-mono text-[12px] overflow-x-auto">{
+pip install -r requirements-mcp.txt                      # one-time: the MCP SDK
+python mcp_server.py                                     # stdio (client spawns it)
+python mcp_server.py --selftest                          # list the tools</pre><div class="text-[12px] text-text-secondary space-y-1"><p>Example MCP client config (Claude Desktop / OpenClaw / compatible client):</p><pre class="p-3 rounded-md bg-black/90 text-[#34A853] font-mono text-[12px] overflow-x-auto">{
   "mcpServers": {
     "gfs-mcp": {
       "command": "python",
-      "args": ["01_harvester_pipeline/serve.py", "--transport", "stdio"],
+      "args": ["mcp_server.py"],
       "cwd": "REPLACE_WITH_ABSOLUTE_REPO_PATH"
     }
   }
-}</pre></div><div class="text-[12px] text-text-secondary space-y-1"><p>Bring your own key for the advisor (per call, or one env var for local dev):</p><pre class="p-3 rounded-md bg-black/90 text-[#34A853] font-mono text-[12px] overflow-x-auto">export GFS_MCP_LLM_KEY="sk-your-key"
-export GFS_MCP_LLM_BASE="https://api.tokenfactory.nebius.com/v1"   # or OpenRouter / Gemini / any OpenAI-compatible
-export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p class="text-[13px] text-text-secondary leading-[1.6]">Full local + cloud instructions, client configs, and security rules: <strong>01_harvester_pipeline/MCP_README.md</strong>. Cloud: the same server deploys as its own protected service (not in place of this portal), and cohort members point their MCP client at the hosted URL with their own key — no local install.</p></div></div><div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1"><div class="p-4 rounded-md border border-border bg-surface space-y-2.5"><div class="flex items-center justify-between"><span class="text-[11px] font-mono px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary font-semibold">stdio · http · sse</span><span class="text-[10px] font-bold uppercase tracking-[0.5px] px-1.5 py-0.5 rounded-sm bg-accent-tint text-accent">retrieval</span></div><h4 class="font-mono font-bold text-[14px] text-text-primary">search_immersion_knowledge</h4><p class="text-[13px] text-text-secondary leading-[1.5]">Fast FTS5 semantic search across cohort session syntheses, speaker transcripts, and key highlights.</p><div class="text-[11px] text-text-muted font-mono pt-1">Inputs: query: string, top_k?: number</div></div><div class="p-4 rounded-md border border-border bg-surface space-y-2.5"><div class="flex items-center justify-between"><span class="text-[11px] font-mono px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary font-semibold">stdio · http · sse</span><span class="text-[10px] font-bold uppercase tracking-[0.5px] px-1.5 py-0.5 rounded-sm bg-accent-tint text-accent">retrieval</span></div><h4 class="font-mono font-bold text-[14px] text-text-primary">get_adk_topology_recipe</h4><p class="text-[13px] text-text-secondary leading-[1.5]">Returns executable code patterns for SequentialAgent, LoopAgent, ParallelAgent, and HierarchicalAgent topologies.</p><div class="text-[11px] text-text-muted font-mono pt-1">Inputs: pattern_id: string</div></div><div class="p-4 rounded-md border border-border bg-surface space-y-2.5"><div class="flex items-center justify-between"><span class="text-[11px] font-mono px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary font-semibold">stdio · http · sse</span><span class="text-[10px] font-bold uppercase tracking-[0.5px] px-1.5 py-0.5 rounded-sm bg-accent-tint text-accent">retrieval</span></div><h4 class="font-mono font-bold text-[14px] text-text-primary">get_modern_web_guidance</h4><p class="text-[13px] text-text-secondary leading-[1.5]">Fetches verified Chrome and GCP modern web guidance for performance, client-side caching, and security boundaries.</p><div class="text-[11px] text-text-muted font-mono pt-1">Inputs: topic_key: string</div></div><div class="p-4 rounded-md border border-border bg-surface space-y-2.5"><div class="flex items-center justify-between"><span class="text-[11px] font-mono px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary font-semibold">http · sse</span><span class="text-[10px] font-bold uppercase tracking-[0.5px] px-1.5 py-0.5 rounded-sm bg-warning/10 text-warning border border-warning/30">BYO-key LLM</span></div><h4 class="font-mono font-bold text-[14px] text-text-primary">ask_immersion_advisor</h4><p class="text-[13px] text-text-secondary leading-[1.5]">Grounded answer using your own model + key. Retrieves from the KB + Session-04 anchors, then calls your OpenAI-compatible provider. Anti-fabrication + DATA-not-instructions enforced; own-origin and non-https targets blocked.</p><div class="text-[11px] text-text-muted font-mono pt-1">Inputs: query: string, grounding?, provider_base?, model?, api_key? (per-call), temperature?</div></div></div></section>
+}</pre></div><div class="text-[12px] text-text-secondary space-y-1"><p>Bring your own key for the advisor (per call, or one env var for local dev):</p><pre class="p-3 rounded-md bg-black/90 text-[#34A853] font-mono text-[12px] overflow-x-auto"># No API key needed: the MCP server retrieves, your agent reasons.
+export GFS_HUB_URL="https://gfs-immersion.vwoosh.com"   # or your own deployment</pre></div><p class="text-[13px] text-text-secondary leading-[1.6]">Full setup, client configs and tool reference: <strong>docs/MCP.md</strong>. The server is retrieval-only and runs locally over stdio — no key, no local index, no hosting.</p></div></div><div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-1"><div class="p-4 rounded-md border border-border bg-surface space-y-2.5"><div class="flex items-center justify-between"><span class="text-[11px] font-mono px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary font-semibold">stdio · http · sse</span><span class="text-[10px] font-bold uppercase tracking-[0.5px] px-1.5 py-0.5 rounded-sm bg-accent-tint text-accent">retrieval</span></div><h4 class="font-mono font-bold text-[14px] text-text-primary">search_immersion_knowledge</h4><p class="text-[13px] text-text-secondary leading-[1.5]">Fast FTS5 semantic search across cohort session syntheses, speaker transcripts, and key highlights.</p><div class="text-[11px] text-text-muted font-mono pt-1">Inputs: query: string, top_k?: number</div></div><div class="p-4 rounded-md border border-border bg-surface space-y-2.5"><div class="flex items-center justify-between"><span class="text-[11px] font-mono px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary font-semibold">stdio · http · sse</span><span class="text-[10px] font-bold uppercase tracking-[0.5px] px-1.5 py-0.5 rounded-sm bg-accent-tint text-accent">retrieval</span></div><h4 class="font-mono font-bold text-[14px] text-text-primary">get_adk_topology_recipe</h4><p class="text-[13px] text-text-secondary leading-[1.5]">Returns executable code patterns for SequentialAgent, LoopAgent, ParallelAgent, and HierarchicalAgent topologies.</p><div class="text-[11px] text-text-muted font-mono pt-1">Inputs: pattern_id: string</div></div><div class="p-4 rounded-md border border-border bg-surface space-y-2.5"><div class="flex items-center justify-between"><span class="text-[11px] font-mono px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary font-semibold">stdio · http · sse</span><span class="text-[10px] font-bold uppercase tracking-[0.5px] px-1.5 py-0.5 rounded-sm bg-accent-tint text-accent">retrieval</span></div><h4 class="font-mono font-bold text-[14px] text-text-primary">get_modern_web_guidance</h4><p class="text-[13px] text-text-secondary leading-[1.5]">Fetches verified Chrome and GCP modern web guidance for performance, client-side caching, and security boundaries.</p><div class="text-[11px] text-text-muted font-mono pt-1">Inputs: topic_key: string</div></div><div class="p-4 rounded-md border border-border bg-surface space-y-2.5"><div class="flex items-center justify-between"><span class="text-[11px] font-mono px-2 py-0.5 rounded-sm bg-black/5 dark:bg-white/5 border border-border text-text-secondary font-semibold">http · sse</span><span class="text-[10px] font-bold uppercase tracking-[0.5px] px-1.5 py-0.5 rounded-sm bg-warning/10 text-warning border border-warning/30">BYO-key LLM</span></div><h4 class="font-mono font-bold text-[14px] text-text-primary">ask_immersion_advisor</h4><p class="text-[13px] text-text-secondary leading-[1.5]">Grounded answer using your own model + key. Retrieves from the KB + Session-04 anchors, then calls your OpenAI-compatible provider. Anti-fabrication + DATA-not-instructions enforced; own-origin and non-https targets blocked.</p><div class="text-[11px] text-text-muted font-mono pt-1">Inputs: query: string, grounding?, provider_base?, model?, api_key? (per-call), temperature?</div></div></div></section>
 <!-- FOOTER (Negative Block Compliant: minimal, no decorative claims or invented fiction) -->
 <footer class="pt-8 border-t border-border flex flex-col md:flex-row items-center justify-between text-[13px] text-text-secondary gap-4">
 <div class="">
@@ -552,6 +600,10 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
 </div>
 </div>
 <div class="flex items-center gap-2">
+          <!-- Enlarge / shrink the panel (Sprint 24) -->
+          <button id="chat-expand-btn" class="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/5 text-text-secondary hover:text-text-primary transition-colors" onclick="toggleChatSize()" title="Enlarge assistant" aria-label="Enlarge assistant" aria-pressed="false">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M4 9V4h5M20 15v5h-5M15 4h5v5M9 20H4v-5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+          </button>
           <!-- Clear Conversation -->
           <button class="p-1.5 rounded hover:bg-black/5 dark:hover:bg-white/5 text-text-secondary hover:text-text-primary transition-colors" onclick="clearChatSession()" title="Clear conversation" aria-label="Clear conversation">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2m-9 0 1 14h8l1-14" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
@@ -601,6 +653,13 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
           Send
         </button>
 </div>
+<div class="flex items-center gap-2">
+<label class="inline-flex items-center gap-1.5 text-[11px] text-text-secondary cursor-pointer" id="chat-live-web-label" title="When enabled, the hub can search official web sources if the local KB has no answer.">
+<input class="rounded border-border text-accent focus:ring-accent" id="chat-live-web" type="checkbox"/>
+<span>Allow live-web fallback</span>
+</label>
+<span class="text-[10px] text-text-muted">(sends a truncated query to Google Custom Search only when local KB abstains)</span>
+</div>
 <div class="flex items-center justify-between text-[10px] text-text-muted">
 <span class="">Security: Client-side retrieval • Server verification via /api/ground</span>
 <span class="" id="chat-ground-state">Ground-check ready</span>
@@ -610,50 +669,7 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
 <!-- ========================================================================= -->
 <!-- MODAL 1: PROVIDER & API KEY MODAL                                          -->
 <!-- ========================================================================= -->
-<div aria-hidden="true" aria-modal="true" class="hidden fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" id="settings-modal" role="dialog">
-<div class="w-full max-w-[480px] rounded-lg border border-border bg-surface shadow-ceiling p-6 space-y-5">
-<div class="flex items-center justify-between border-b border-border pb-3">
-<h3 class="text-[18px] font-bold text-text-primary">Provider &amp; API Key</h3>
-<button class="text-text-muted hover:text-text-primary" onclick="closeSettingsModal()">
-<svg class="w-5 h-5" fill="none" stroke="currentColor" viewbox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path></svg>
-</button>
-</div>
-<div class="space-y-4 text-[13px]">
-<div class="p-3 rounded bg-accent-tint border border-accent-border text-text-secondary text-[12px]">
-<strong>Security guarantee:</strong> the key lives in localStorage only and is sent exclusively to your provider base URL. Never transmitted to our origin.
-        </div>
-<!-- Field 1: Provider Base URL -->
-<div class="space-y-1">
-<label class="block font-medium text-text-primary" for="provider-url">Provider Base URL</label>
-<input class="w-full h-9 px-3 rounded-md border border-border bg-canvas text-text-primary font-mono text-[12px] focus:outline-none focus:border-accent" id="provider-url" type="text" value="https://openrouter.ai/api/v1"/>
-</div>
-<!-- Field 2: Model -->
-<div class="space-y-1">
-<label class="block font-medium text-text-primary" for="provider-model">Model ID</label>
-<input class="w-full h-9 px-3 rounded-md border border-border bg-canvas text-text-primary font-mono text-[12px] focus:outline-none focus:border-accent" id="provider-model" type="text" value="google/gemini-2.5-flash-lite:free"/>
-</div>
-<!-- Field 3: API Key -->
-<div class="space-y-1">
-<label class="block font-medium text-text-primary" for="llm-key">API Key (Masked Password Field)</label>
-<input class="w-full h-9 px-3 rounded-md border border-border bg-canvas text-text-primary font-mono text-[12px] focus:outline-none focus:border-accent" id="llm-key" placeholder="sk-or-v1-..." type="password" onkeydown="if(event.key==='Enter'){event.preventDefault();saveKeySettings();}"/>
-</div>
-<div class="text-[11px] text-text-muted" id="settings-status">Leave a field empty to keep its current value.</div>
-</div>
-<div class="flex items-center justify-between pt-2 border-t border-border">
-<button class="px-3 py-1.5 rounded-md border border-danger/40 text-danger hover:bg-danger/10 text-[13px] font-medium transition-colors" onclick="forgetKey()">
-          Forget Key
-        </button>
-<div class="flex items-center gap-2">
-<button class="px-3 py-1.5 rounded-md border border-border text-text-secondary hover:text-text-primary text-[13px] font-medium" onclick="closeSettingsModal()">
-            Cancel
-          </button>
-<button class="px-4 py-1.5 rounded-md bg-accent hover:bg-accent-hover text-white text-[13px] font-medium transition-colors" onclick="saveKeySettings()">
-            Save Key
-          </button>
-</div>
-</div>
-</div>
-</div>
+
 <!-- ========================================================================= -->
 <!-- MODAL 2: SC-05 FEEDBACK MODAL                                              -->
 <!-- ========================================================================= -->
@@ -890,6 +906,21 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
       if (keyInput) localStorage.setItem(LLM_STORAGE.key, keyInput);
       localStorage.setItem(LLM_STORAGE.origin, location.origin);
 
+      // BYO Google Custom Search credentials (optional; browser-only).
+      const cseKeyEl = document.getElementById('cse-key');
+      const cseCxEl = document.getElementById('cse-cx');
+      const cseKey = cseKeyEl ? cseKeyEl.value.trim() : '';
+      const cseCx = cseCxEl ? cseCxEl.value.trim() : '';
+      if (cseKey || cseCx) {
+        if (cseKey && !/^AIza[0-9A-Za-z_\-]{10,}$/.test(cseKey)) {
+          showSettingsStatus('Google API key should start with "AIza". Saved anyway — check it if search fails.', 'danger');
+        }
+        if (WebSearch) WebSearch.saveSearchCredentials(cseKey, cseCx);
+        if (cseKeyEl) cseKeyEl.value = '';
+        if (cseCxEl) cseCxEl.value = '';
+      }
+      refreshCseStatus();
+
       initKeyStatus();
       showSettingsStatus('Saved — ' + (model || 'default model') + ' is now active.', 'success');
       setTimeout(closeSettingsModal, 700);
@@ -908,11 +939,37 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
       closeSettingsModal();
     }
 
+    /** Reflect whether BYO search credentials are present. */
+    function refreshCseStatus() {
+      const el = document.getElementById('cse-status');
+      if (!el) return;
+      const ok = !!(WebSearch && WebSearch.isWebSearchConfigured());
+      el.textContent = ok ? 'configured' : 'not configured';
+      el.className = 'text-[10px] px-1.5 py-0.5 rounded-sm font-mono '
+        + (ok ? 'bg-success/15 text-success' : 'bg-accent-tint text-accent');
+      const toggleLabel = document.getElementById('chat-live-web-label');
+      if (toggleLabel) toggleLabel.title = ok
+        ? 'When enabled, the hub can search official web sources with YOUR Google key if the local KB has no answer.'
+        : 'Add your own Google Custom Search credentials in Settings to enable this.';
+    }
+
+    function forgetSearchCreds() {
+      if (WebSearch) WebSearch.clearSearchCredentials();
+      const k = document.getElementById('cse-key'); const c = document.getElementById('cse-cx');
+      if (k) k.value = ''; if (c) c.value = '';
+      refreshCseStatus();
+      showSettingsStatus('Search credentials removed from this browser.', 'success');
+    }
+
     function openSettingsModal() {
       const m = document.getElementById('settings-modal');
       if (!m) return;
       m.classList.remove('hidden');
       m.setAttribute('aria-hidden', 'false');
+      // Sprint 22 hotfix: show what is already saved (cx back in the field, key as
+      // a placeholder) so a stored engine id no longer looks lost. populateCseFields
+      // is a module export, so call it through the window bridge.
+      try { if (window.GFS_populateCseFields) window.GFS_populateCseFields(); } catch (e) {}
       const first = m.querySelector('input');
       if (first) first.focus();
     }
@@ -978,9 +1035,12 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
 
     function assistantBubble(html) {
       const wrap = document.createElement('div');
-      wrap.className = 'flex items-start gap-2.5';
+      // min-w-0 on the flex child is required: without it a long unbreakable
+      // string (an excerpt title) refuses to shrink and pushes the bubble past
+      // the panel edge, where overflow-hidden clips it.
+      wrap.className = 'flex items-start gap-2.5 min-w-0';
       wrap.innerHTML = '<div class="w-6 h-6 rounded-full bg-accent text-white flex-shrink-0 flex items-center justify-center text-[10px] font-bold">G</div>'
-        + '<div class="p-3 rounded-lg bg-[var(--chat-asst-bg)] text-[var(--chat-asst-text)] max-w-[85%] space-y-1.5 border border-border">' + html + '</div>';
+        + '<div class="p-3 rounded-lg bg-[var(--chat-asst-bg)] text-[var(--chat-asst-text)] max-w-[85%] min-w-0 overflow-hidden break-words space-y-1.5 border border-border">' + html + '</div>';
       return wrap;
     }
 
@@ -990,6 +1050,53 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
       box.appendChild(el);
       box.scrollTop = box.scrollHeight;
       return el;
+    }
+
+    function renderProviderErrorPanel(message, retryable) {
+      const box = document.getElementById('chat-messages');
+      // Remove any previous provider error panel to avoid stacking duplicates.
+      const existing = document.getElementById('provider-error-panel');
+      if (existing) existing.remove();
+
+      const wrap = document.createElement('div');
+      wrap.id = 'provider-error-panel';
+      wrap.className = 'flex items-start gap-2.5';
+      const inner = document.createElement('div');
+      inner.className = 'p-3 rounded-lg bg-warning/10 border border-warning/30 text-warning max-w-[85%] space-y-1.5';
+      const title = document.createElement('p');
+      title.className = 'font-medium';
+      title.textContent = 'Provider setting issue';
+      const body = document.createElement('p');
+      body.className = 'text-[12px]';
+      body.textContent = message;
+      inner.appendChild(title);
+      inner.appendChild(body);
+      if (retryable) {
+        const hint = document.createElement('p');
+        hint.className = 'text-[11px]';
+        hint.textContent = 'Retrying with repaired parameters...';
+        inner.appendChild(hint);
+      }
+      wrap.appendChild(inner);
+      box.appendChild(wrap);
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function toggleChatSize() {
+      // Sprint 24: let a user who is working with the assistant enlarge the panel.
+      const panel = document.getElementById('chat-panel');
+      if (!panel) return;
+      const on = panel.classList.toggle('expanded');
+      const btn = document.getElementById('chat-expand-btn');
+      if (btn) {
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        btn.title = on ? 'Shrink assistant' : 'Enlarge assistant';
+        btn.setAttribute('aria-label', btn.title);
+      }
+      if (on) {
+        const input = document.getElementById('chat-input');
+        if (input) input.focus();
+      }
     }
 
     function clearChatSession() {
@@ -1056,14 +1163,20 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
         return () => clearTimeout(t);
       };
 
+      let liveWebRequested = false;
       (async () => {
         const stopRetrievalTimer = withTimeout(RETRIEVAL_TIMEOUT_MS);
         let data;
         try {
+          const liveWeb = !!document.getElementById('chat-live-web')?.checked;
+          liveWebRequested = liveWeb;
+          const chatBody = { message: query };
+          if (scope) chatBody.scope = scope;
+          if (liveWeb) chatBody.live_web = true;
           const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(scope ? { message: query, scope: scope } : { message: query }),
+            body: JSON.stringify(chatBody),
             signal: controller.signal
           });
           stopRetrievalTimer();
@@ -1089,11 +1202,213 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
           return;
         }
 
-        if (!data || !data.answerable) {
+        // Sprint 21 / Part B: the relevance gate redirected a question that is not
+        // about the cohort material. Render it as a neutral (not error-red) bubble with
+        // no sources block, plus clickable rephrase chips. Note it arrives with
+        // answerable=true, so it must be handled BEFORE the abstention/live-web branch.
+        if (data && data.relevance === 'out_of_scope') {
           finish();
-          appendAssistant('<p class="font-medium text-warning">🔍 No grounded material found</p>'
-            + '<p class="text-[12px] text-text-secondary">There is not enough verified knowledge in this hub to answer that reliably. Try asking about ADK, SequentialAgent, Cloud Run, Antigravity, or VC math.</p>');
+          const chips = (data.suggested_questions || [])
+            .map(function (s) { return (s && s.question) ? s.question : (typeof s === 'string' ? s : ''); })
+            .filter(Boolean)
+            .map(function (q) {
+              return '<button type="button" class="chat-suggest px-2 py-1 rounded border border-border '
+                + 'bg-surface hover:bg-black/5 dark:hover:bg-white/10 text-[11px] text-text-secondary" '
+                + 'data-q="' + escapeHtml(q) + '">' + escapeHtml(q) + '</button>';
+            })
+            .join('');
+          appendAssistant('<p class="font-medium text-text-secondary">ℹ️ Outside this hub\u2019s scope</p>'
+            + '<p class="text-[13px] text-text-secondary">' + escapeHtml(String(data.message || '')) + '</p>'
+            + (chips
+              ? '<p class="text-[11px] text-text-muted mt-2">Try one of these instead:</p>'
+                + '<div class="flex flex-wrap gap-1.5 mt-1">' + chips + '</div>'
+              : ''));
+          const host = messagesContainer.lastElementChild;
+          if (host) {
+            host.querySelectorAll('.chat-suggest').forEach(function (btn) {
+              btn.addEventListener('click', function () {
+                const q = btn.getAttribute('data-q') || '';
+                const input = document.getElementById('chat-input');
+                if (input && q) { input.value = q; input.focus(); }
+              });
+            });
+          }
           return;
+        }
+
+        const localAnswerable = !!(data && data.answerable);
+        // Sprint 21h (a): run the BYO web fallback whenever the caller EXPLICITLY
+        // asked for live-web, not only on a hard abstention. Previously a partial
+        // (but useless) local match suppressed the web path entirely, so the toggle
+        // silently did nothing for questions like "can I use Stitch via CLI?".
+        // Mirrors the server rule: (not answerable or live_web is True).
+        const cseCreds = (window.WebSearch && window.WebSearch.getSearchCredentials()) || null;
+        const webEnabled = (window.WebSearch && window.WebSearch.isWebSearchEnabled()) || false;
+        const canSearchWeb = !!cseCreds && webEnabled;
+        if (!localAnswerable || liveWebRequested) {
+          if (canSearchWeb) {
+            loadingBubble.remove();
+            const webBubble = assistantBubble(
+              '<div class="flex items-center gap-1 text-[11px] text-accent font-medium animate-pulse"><span>🌐</span><span>Searching the web with your Google key…</span></div>'
+            );
+            messagesContainer.appendChild(webBubble);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+            const webRes = await window.WebSearch.searchWeb(query, cseCreds, { num: 3 });
+            webBubble.remove();
+
+            if (!webRes.ok) {
+              const why = {
+                quota_exhausted: 'Your Google Custom Search daily quota (100/day) is exhausted.',
+                bad_credentials: 'Google rejected your API key or search engine ID.',
+                api_not_enabled: 'The "Custom Search API" is not enabled for your Google Cloud project (enable it, then retry).',
+                key_restricted: 'Your Google API key is restricted and may not allow this site or the Custom Search API.',
+                no_credentials: 'Add your Google search credentials in Settings.',
+                throttled: 'Slow down a moment — search calls are rate-limited.',
+                no_allowed_results: 'No results from trusted domains were found.',
+                network_error: 'Could not reach Google Custom Search.'
+              }[webRes.reason] || ('Live-web search failed (' + webRes.reason + ').');
+              const whyDetail = webRes.detail
+                ? ' Google said: “' + escapeHtml(webRes.detail) + '”.'
+                : '';
+              // Sprint 21h: if the hub already has a usable answer, a failed OPTIONAL
+              // web pass must not throw it away. Report the failure and fall through.
+              appendAssistant('<p class="font-medium text-warning">🌐 Live-web fallback unavailable</p>'
+                + '<p class="text-[12px] text-text-secondary">' + escapeHtml(why) + whyDetail + '</p>'
+                + (localAnswerable
+                  ? '<p class="text-[12px] text-text-secondary">Answering from this hub’s own knowledge instead.</p>'
+                  : '<p class="text-[12px] text-text-secondary">There is not enough verified knowledge in this hub to answer that reliably.</p>'));
+              if (!localAnswerable) {
+                finish();
+                return;
+              }
+            }
+            // Everything below needs real web results; skip it after a failed search.
+            if (webRes.ok) {
+
+            // Stage 2: enrich with real page bodies via our SSRF-guarded /api/fetch.
+            // The browser cannot read these sites directly (no CORS), and the CSE
+            // snippet is only a teaser. Best-effort: failures keep the snippet.
+            const fetchingBubble = assistantBubble(
+              '<div class="flex items-center gap-1 text-[11px] text-accent font-medium animate-pulse"><span>🌐</span><span>Reading the source pages…</span></div>'
+            );
+            messagesContainer.appendChild(fetchingBubble);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            let webSnippets = webRes.snippets;
+            try {
+              if (window.WebSearch.enrichWithPageBodies) {
+                webSnippets = await window.WebSearch.enrichWithPageBodies(webRes.snippets, { maxPages: 3, signal: controller.signal });
+              }
+            } catch (e) {
+              webSnippets = webRes.snippets; // degrade to snippets only
+            }
+            fetchingBubble.remove();
+            const bodyCount = webSnippets.filter(function (s) { return Array.isArray(s.body) && s.body.length; }).length;
+
+            // Ground the answer on the fetched content, WITH the untrusted boundary
+            // and citation rule, exactly as the server path does.
+            const wrapped = window.WebSearch.wrapUntrustedSnippets(webSnippets);
+            const webSystemPrompt = 'You are an unofficial cohort companion tool. Never state or imply that you are an official Google or Antler product, and always attribute official material to its source.'
+              + '\n\n' + window.WebSearch.UNTRUSTED_SNIPPET_DIRECTIVE
+              + '\n\nThe following web excerpts were retrieved for this question:\n\n' + wrapped;
+
+            if (!key) {
+              appendAssistant('<p class="font-medium text-warning">🔑 Missing provider API key</p>'
+                + '<p class="text-[12px] text-text-secondary">Web results were found, but generating an answer needs your own model key. Add it in Settings.</p>'
+                + '<button onclick="openSettingsModal()" class="text-accent text-[12px] font-bold hover:underline">Open Settings →</button>');
+              finish();
+              return;
+            }
+
+            try {
+              const webParams = window.ProviderConfig.buildGenerationParams({
+                model: model, baseUrl: base, temperature: 0.2, maxTokens: 900
+              });
+              const webBody = Object.assign({}, webParams, {
+                messages: [
+                  { role: 'system', content: webSystemPrompt },
+                  { role: 'user', content: query }
+                ]
+              });
+              const webResp = await callProvider({ base: base, key: key, signal: controller.signal }, webBody);
+              const webJson = await webResp.json();
+              const webAnswer = (webJson && webJson.choices && webJson.choices[0]
+                && webJson.choices[0].message && webJson.choices[0].message.content) || '';
+              const srcList = webSnippets.map(function (s, i) {
+                return '[' + (i + 1) + '] ' + s.title + ' — ' + s.link;
+              }).join('\n');
+              const webMd = (window.MdLite && window.MdLite.renderMarkdown)
+                ? window.MdLite.renderMarkdown(webAnswer || 'No answer generated.')
+                : escapeHtml(webAnswer || 'No answer generated.');
+              // Sprint 21 / U-17: this answer was generated client-side from arbitrary
+              // web pages, so it never passed /api/ground and would otherwise carry NO
+              // verification signal at all. Route it through /api/ground so it receives
+              // the same verdict as a KB answer. If grounding is unavailable, the answer
+              // is still shown but explicitly labelled `uncited`.
+              let webVerification = 'uncited';
+              let webBadge = '<span class="text-warning">⚠ Unverified — generated from live web results, not from this hub</span>';
+              try {
+                const gRes = await fetch('/api/ground', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    answer: webAnswer || '',
+                    citations: webSnippets.map(function (s, i) {
+                      return { title: s.title, url: s.link, fusion_key: 'web:' + i };
+                    })
+                  })
+                });
+                if (gRes.ok) {
+                  const gData = await gRes.json();
+                  webVerification = gData.verification || (gData.ok ? 'cited' : 'rejected');
+                  if (webVerification === 'uncited') {
+                    webBadge = '<span class="text-warning">⚠ Unverified — no source citations; may contain errors</span>';
+                  } else if (webVerification === 'partial') {
+                    webBadge = '<span class="text-warning">⚠ Some citations could not be verified</span>';
+                  } else if (webVerification === 'cited') {
+                    webBadge = '<span class="text-success">✓ Grounding check passed</span>';
+                  }
+                }
+              } catch (e) { /* grounding unavailable: stays `uncited`, which is honest */ }
+
+              appendAssistant('<p class="font-medium text-success">🌐 Live web answer (from your Google search)</p>'
+                + '<div class="text-[13px] md-body">' + webMd + '</div>'
+                + '<p class="text-[11px] mt-1 font-semibold">' + webBadge + '</p>'
+                + '<p class="text-[11px] text-text-muted mt-2">Sources:\n' + escapeHtml(srcList) + '</p>'
+                + (bodyCount
+                  ? '<p class="text-[10px] text-text-muted mt-1">Read full text from ' + bodyCount + ' of ' + webSnippets.length + ' pages.</p>'
+                  : '<p class="text-[10px] text-text-muted mt-1">Grounded on search excerpts only.</p>')
+                + '<p class="text-[10px] text-text-muted mt-2">'
+                + (webVerification === 'cited'
+                    ? 'AI-generated from retrieved web sources; verify against the linked source; not investment advice.'
+                    : 'No verified source backs this answer — treat as ungrounded until you confirm it independently; not investment advice.')
+                + '</p>');
+            } catch (e) {
+              appendAssistant('<p class="font-medium text-warning">🌐 Web answer failed</p>'
+                + '<p class="text-[12px] text-text-secondary">' + escapeHtml(String(e && e.message || e)) + '</p>');
+            }
+            finish();
+            return;
+            }  // end if (webRes.ok)
+          }
+
+          if (!localAnswerable) {
+            finish();
+            appendAssistant('<p class="font-medium text-warning">🔍 No grounded material found</p>'
+              + '<p class="text-[12px] text-text-secondary">There is not enough verified knowledge in this hub to answer that reliably. Try asking about ADK, SequentialAgent, Cloud Run, Antigravity, or VC math.</p>'
+              + (canSearchWeb
+                ? '<p class="text-[12px] text-text-secondary">Tip: tick <strong>Allow live-web fallback</strong> to search official sources with your own Google key.</p>'
+                : '<p class="text-[12px] text-text-secondary">Tip: add your own Google Custom Search credentials in Settings to enable live-web answers.</p>'));
+            return;
+          }
+
+          // Sprint 21h (b): the user asked for live-web but it cannot run here. Say so
+          // instead of doing nothing silently, then fall through to the local answer.
+          if (liveWebRequested && !canSearchWeb) {
+            appendAssistant('<p class="font-medium text-warning">🌐 Live-web fallback not available</p>'
+              + '<p class="text-[12px] text-text-secondary">No Google Custom Search credentials are saved in this browser, so the web search could not run. Add your own API key and search-engine ID in Settings to enable it.</p>'
+              + '<button onclick="openSettingsModal()" class="text-accent text-[12px] font-bold hover:underline">Open Settings →</button>');
+          }
         }
 
         if (!key) {
@@ -1120,46 +1435,63 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
         genBubble.dataset.reqId = reqId;
         messagesContainer.appendChild(genBubble);
 
-        if (excerpts.length) {
-          const hintBox = document.createElement('div');
-          hintBox.className = 'flex flex-wrap gap-1';
-          excerpts.slice(0, 5).forEach(function (excerpt, idx) {
-            const chip = document.createElement('span');
-            chip.className = 'px-2 py-1 rounded-md border border-accent/30 bg-accent-tint text-[10px] text-accent font-medium';
-            chip.textContent = '[' + (idx + 1) + '] ' + (excerpt && excerpt.title ? excerpt.title : 'source');
-            hintBox.appendChild(chip);
-          });
-          genBubble.querySelector('div').appendChild(hintBox);
-        }
+        // NOTE: the retrieved-source chips used to be appended to this loading
+        // bubble. That left a stray chip block visible under the spinner (the
+        // "cut-off box" artifact) and then vanished when the bubble was
+        // removed. They now render once, in the final answer footer.
+
         messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
         // --- Provider call ---------------------------------------------------
         const stopProviderTimer = withTimeout(PROVIDER_TIMEOUT_MS);
         let answer;
         try {
-          const genRes = await callProvider({ base: base, key: key, signal: controller.signal }, {
+          const ProviderConfig = window.ProviderConfig;
+          const genParams = ProviderConfig.buildGenerationParams({
             model: model,
+            baseUrl: base,
+            temperature: 0.2,
+            maxTokens: 1500
+          });
+          // The provider needs the conversation. buildGenerationParams returns only
+          // the tuning knobs (model/max_tokens/temperature), so the messages must be
+          // attached here — without this the body has an empty messages array and
+          // every provider answers 400 Bad Request.
+          const genBody = Object.assign({}, genParams, {
             messages: [
               { role: 'system', content: fullSystemPrompt },
               { role: 'user', content: query }
-            ],
-            temperature: 0.2,
-            max_tokens: 1500
+            ]
           });
+          let genRes = await callProvider({ base: base, key: key, signal: controller.signal }, genBody);
+          if (!genRes.ok) {
+            const errorText = await genRes.text();
+            const recovered = ProviderConfig.applyErrorRecovery(errorText, genBody, genRes.status);
+            if (recovered.changed && recovered.retryable) {
+              genRes = await callProvider({ base: base, key: key, signal: controller.signal }, recovered.params);
+              renderProviderErrorPanel(recovered.message, true);
+            } else if (recovered.message) {
+              renderProviderErrorPanel(recovered.message, false);
+            }
+          }
           stopProviderTimer();
 
           if (!genRes.ok) {
             let detail = '';
             try {
               const body = await genRes.json();
-              detail = (body && body.error && (body.error.message || body.error)) || '';
+              const e = body && body.error;
+              detail = (e && (e.message || e.code)) || '';
+              if (!detail && e && typeof e === 'string') detail = e;
+              if (!detail && body && body.message) detail = body.message;
             } catch (e) { /* non-JSON error body */ }
             const hint = genRes.status === 401 ? 'Your API key was rejected — check it in Settings.'
               : genRes.status === 402 ? 'The provider reports insufficient credit for this key.'
               : genRes.status === 429 ? 'Rate limited by the provider — wait a moment and retry.'
               : genRes.status === 404 ? 'The provider does not recognise this model id: ' + model
+              : genRes.status === 400 ? 'The provider rejected the request shape or the model id.'
               : 'The provider rejected the request.';
-            throw new Error(hint + (detail ? ' (' + String(detail).slice(0, 200) + ')' : ' (' + genRes.status + ')'));
+            throw new Error(hint + (detail ? ' — ' + String(detail).slice(0, 300) : ' (HTTP ' + genRes.status + ')'));
           }
 
           const ct = genRes.headers.get('content-type') || '';
@@ -1190,10 +1522,23 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
         if (genBubble.isConnected) genBubble.remove();
         const answerEl = appendAssistant(
           '<div class="flex items-center gap-1.5 text-[11px] text-text-muted font-semibold" data-role="ground"><span>◌</span><span>Verifying claims…</span></div>'
-          + '<div class="text-[13px] leading-[1.6] whitespace-pre-wrap"></div>'
+          + '<div class="text-[13px] leading-[1.6] whitespace-pre-wrap md-body"></div>'
           + '<div class="text-[11px] text-text-muted pt-1 border-t border-border"></div>'
         );
-        answerEl.querySelector('.whitespace-pre-wrap').textContent = answer;
+        // Render Markdown (escaped-first, http(s)-only links) instead of flat text.
+        const answerBody = answerEl.querySelector('.md-body');
+        answerBody.innerHTML = (window.MdLite && window.MdLite.renderMarkdown)
+          ? window.MdLite.renderMarkdown(answer)
+          : '';
+        if (!answerBody.innerHTML.trim()) {
+          answerBody.textContent = answer;
+        }
+        answerBody.classList.remove('whitespace-pre-wrap');
+        // Sprint 24: make citation tokens clickable (original text + highlight).
+        if (window.ExcerptModal) {
+          window.ExcerptModal.wire(answerBody, excerpts);
+          window.ExcerptModal.bind(answerBody);
+        }
 
         if (activeRequest && activeRequest.id === reqId) {
           activeRequest = null;
@@ -1205,28 +1550,71 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
 
         // --- Grounding is advisory: never destroy a valid answer ------------
         let grounded = null;
+        // Sprint 21: declared OUTSIDE the try so the badge, the footer disclaimer and the
+        // copy handler can read them after the catch. Declaring them inside the try left
+        // them out of scope and the badge silently failed to render.
+        let verification = null;   // cited | uncited | partial | rejected
+        let fabricated = [];
         try {
           const groundRes = await fetch('/api/ground', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ answer: answer, citations: sources })
+            body: JSON.stringify({ answer: answer, citations: excerpts })
           });
           if (groundRes.ok) {
             const groundData = await groundRes.json();
             grounded = groundData.ok !== false;
-            if (groundData.answer) answerEl.querySelector('.whitespace-pre-wrap').textContent = groundData.answer;
+            // Sprint 21 / Part C: the tier drives the badge, the footer disclaimer and
+            // what Copy-as-Markdown carries. Fall back to the old boolean for an older
+            // server that does not send `verification` yet.
+            verification = groundData.verification || (groundData.ok ? 'cited' : 'rejected');
+            fabricated = Array.isArray(groundData.fabricated) ? groundData.fabricated : [];
+            if (groundData.answer) {
+              answer = groundData.answer;
+              const body = answerEl.querySelector('.md-body');
+              if (body) {
+                body.innerHTML = (window.MdLite && window.MdLite.renderMarkdown)
+                  ? window.MdLite.renderMarkdown(groundData.answer)
+                  : '';
+                if (!body.innerHTML.trim()) body.textContent = groundData.answer;
+                if (window.ExcerptModal) {
+                  window.ExcerptModal.wire(body, excerpts);
+                  window.ExcerptModal.bind(body);
+                }
+              }
+            }
           }
         } catch (e) { grounded = null; }
 
-        if (grounded === true) {
+        // Sprint 21 / Part C: four tiers. `uncited` and `partial` still RENDER the
+        // answer body -- the whole point is to degrade with a caveat, never to delete
+        // a useful answer just because it carries no [n] markers.
+        if (verification === 'cited') {
           groundEl.innerHTML = '<span class="text-success">✓ Grounding check passed</span> · <span>Sources: ' + sources.length + '</span>';
           groundEl.className = 'flex items-center gap-1.5 text-[11px] font-semibold';
-        } else if (grounded === false) {
+        } else if (verification === 'uncited') {
+          groundEl.innerHTML = '<span class="text-warning">⚠ Unverified — no source citations; may contain errors</span>';
+          groundEl.className = 'flex items-center gap-1.5 text-[11px] font-semibold';
+        } else if (verification === 'partial') {
+          const nRemoved = fabricated.length;
+          groundEl.innerHTML = '<span class="text-warning">⚠ Some citations could not be verified</span>'
+            + (nRemoved ? ' · <span>' + nRemoved + ' removed</span>' : '');
+          groundEl.className = 'flex items-center gap-1.5 text-[11px] font-semibold';
+        } else if (verification === 'rejected') {
           groundEl.innerHTML = '<span class="text-warning">⚠ Grounding check failed</span> · <span>verify against the official sources</span>';
           groundEl.className = 'flex items-center gap-1.5 text-[11px] font-semibold';
         } else {
           groundEl.innerHTML = '<span class="text-text-muted">— Not verified (grounding service unavailable)</span>';
           groundEl.className = 'flex items-center gap-1.5 text-[11px]';
+        }
+
+        // Sprint 21: list what was stripped so the user can see the evidence.
+        if (verification === 'partial' && fabricated.length) {
+          const removedEl = document.createElement('div');
+          removedEl.className = 'mt-1 text-[10px] text-text-muted';
+          removedEl.textContent = 'Removed as unverifiable: '
+            + fabricated.map(function (f) { return String(f); }).join(', ');
+          groundEl.parentNode && groundEl.parentNode.insertBefore(removedEl, groundEl.nextSibling);
         }
 
         // B1: canonical clickable source links from the excerpts the API returns.
@@ -1240,16 +1628,39 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
             return '<a href="' + escapeHtml(href) + '" target="_blank" rel="noopener">[' + (i + 1) + '] ' + escapeHtml(e.title) + '</a>';
           })
           .filter(Boolean);
+        // Sprint 21: under `uncited` the excerpts were NOT cited by the answer, so
+        // calling them "Sources" would overstate the evidence.
+        const srcLabel = (verification === 'uncited') ? 'Retrieved (not cited by this answer)' : 'Sources';
         const srcHtml = srcEls.length
-          ? '<div class="mt-2 text-xs">Sources: ' + srcEls.join('  ·  ') + '</div>'
+          ? '<div class="mt-2 text-xs">' + srcLabel + ': ' + srcEls.join('  ·  ') + '</div>'
           : '<div class="mt-2 text-xs text-text-muted">No citable source</div>';
+        // Sprint 17: source/grounding badge (strictly from data.source/data.grounded).
+        const sourceBadge = (data && data.source === 'live_web' && data.grounded === 'web')
+          ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-accent/40 bg-accent/10 text-accent text-[11px] font-semibold">🌐 Live web</span>'
+          : (data && data.source === 'local_kb' && data.grounded === 'local')
+            ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-success/40 bg-success/10 text-success text-[11px] font-semibold">📚 Local KB</span>'
+            : (data && data.grounded === 'abstained')
+              ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded border border-warning/40 bg-warning/10 text-warning text-[11px] font-semibold">⚪ Abstained</span>'
+              : '';
+
         if (footEl) {
           footEl.appendChild(document.createElement('div'));
-          footEl.lastChild.innerHTML = srcHtml;
+          footEl.lastChild.innerHTML = (sourceBadge ? '<div class="mb-1.5">' + sourceBadge + '</div>' : '') + srcHtml;
           const versionPart = promptVersion ? '<div class="text-[11px] text-text-muted">Prompt v' + String(promptVersion).slice(0, 8) + '</div>' : '';
           const verWrap = document.createElement('div');
           verWrap.innerHTML = versionPart;
           if (versionPart) footEl.appendChild(verWrap.firstChild);
+
+          // Sprint 17: persistent per-answer disclaimer.
+          const disclaimer = document.createElement('div');
+          disclaimer.className = 'text-[11px] text-text-muted pt-1';
+          // Sprint 21: the disclaimer must state the actual evidence status.
+          disclaimer.textContent = (verification === 'uncited')
+            ? 'No verified source backs this answer — treat as ungrounded until you confirm it independently; not investment advice.'
+            : (verification === 'partial')
+              ? 'AI-generated; one or more citations could not be verified; verify before use; not investment advice.'
+              : 'AI-generated from retrieved sources; verify against the linked source; not investment advice.';
+          footEl.appendChild(disclaimer);
 
           // B7: copy button (mounted in the answer footer, so error bubbles are excluded).
           const btn = document.createElement('button');
@@ -1257,11 +1668,15 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
           btn.className = 'text-[11px] font-semibold text-accent hover:underline';
           btn.textContent = 'Copy';
           btn.addEventListener('click', async () => {
-            const answerText = answerEl.querySelector('.whitespace-pre-wrap').textContent;
+            // Copy as Markdown, with a Sources section — a paste into Slack or a
+            // doc keeps the formatting and the attributions.
+            const md = (window.MdLite && window.MdLite.toClipboardMarkdown)
+              ? window.MdLite.toClipboardMarkdown(answer, sources, verification || 'cited', fabricated)
+              : answer;
             if (!(navigator.clipboard && navigator.clipboard.writeText)) {
               btn.textContent = 'Press Ctrl/Cmd+C'; return;
             }
-            try { await navigator.clipboard.writeText(answerText); btn.textContent = 'Copied'; }
+            try { await navigator.clipboard.writeText(md); btn.textContent = 'Copied'; }
             catch { btn.textContent = 'Press Ctrl/Cmd+C'; }
             setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
           });
@@ -1450,29 +1865,30 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
         speakers: 'Adam French (Antler UK)',
         content: `
           <h4 class="font-bold text-text-primary text-[15px]">Executive Synthesis</h4>
-          <p>Adam French (Partner, Antler UK; co-founder of Scalable Capital) sets out the three lenses Antler applies to an idea at the earliest stage — <strong>founder-market fit (why you?), problem-solution fit (is the problem real, and proven?), and venture scale (could this return a fund?)</strong> — and shows how to pressure-test and then <em>enlarge</em> a problem statement.</p>
-          <h4 class="font-bold text-text-primary text-[15px] mt-4">The Three Lenses</h4>
+          <p>Adam French (Partner, Antler UK; co-founder of Scalable Capital) decodes early-stage venture math: Antler's <strong>Five Lenses to Make an Idea Bigger</strong>, unit economics under inference token costs, and the pre-seed defensibility hierarchy. The linked scorecard and AI coach implement the Five Lenses.</p>
+          <h4 class="font-bold text-text-primary text-[15px] mt-4">The Five Lenses to Make an Idea Bigger</h4>
           <ul class="list-disc list-inside space-y-1.5">
-            <li><strong>Founder-Market Fit — "Why you?"</strong> Earned secret · unfair access · the right spike · durability · proof in motion. "Pedigree is not founder-market fit."</li>
-            <li><strong>Problem-Solution Fit — "Is it real and proven?"</strong> Six attributes (Painful · Popular · Frequent · Urgent · Growing · Unavoidable); problem archetypes (Hair on Fire / Hard Fact / Future Vision); the evidence 2×2 (Proceed / Pivot / Stop); the ladder of proof.</li>
-            <li><strong>Venture Scale — "Could this return a fund?"</strong> Power law (~6% of investments → ~60% of returns; need $1B+ outcomes); a credible path to hundreds of millions in revenue; 10× better, not 10% better.</li>
+            <li><strong>Lens 1 — 10× More Places.</strong> Can the core engine or architectural pattern solve adjacent high-value problems without a total rewrite? <em>Deck example: ElevenLabs.</em></li>
+            <li><strong>Lens 2 — Replace Legacy.</strong> Are you competing with a line-item software subscription, or replacing manual labour and organisational friction? <em>Deck example: Lovable.</em></li>
+            <li><strong>Lens 3 — Market Standard.</strong> Can your architecture define the canonical data standard, evaluation benchmark, or workflow protocol for the industry? <em>Deck example: Stripe.</em></li>
+            <li><strong>Lens 4 — 10× More Differentiated.</strong> What prevents a frontier model lab or a 5-person fast-follower from copying this next month? Differentiators must be structural, not linguistic. <em>Deck example: Scalable Capital.</em></li>
+            <li><strong>Lens 5 — Beat Competition.</strong> Does the team have the operational leverage to out-ship a traditional 20-person engineering organisation? <em>Deck example: Cursor.</em></li>
           </ul>
           <h4 class="font-bold text-text-primary text-[15px] mt-4">Tools You Can Reuse</h4>
           <ul class="list-disc list-inside space-y-1.5">
-            <li><strong>Ladder of proof:</strong> name your rung, and the next one you'll climb.</li>
-            <li><strong>Five Lenses to make an idea bigger:</strong> 10× more places · replace the legacy system · become the market standard · 10× more differentiated · beat the competition outright.</li>
-            <li><strong>The Mom Test:</strong> ask about their life and past specifics; talk less, listen more.</li>
-            <li><strong>Why now:</strong> inference cost for a GPT-3.5-level system fell ~280× (Nov 2022 → Oct 2024, Stanford HAI).</li>
-            <li><strong>PMF shows in retention:</strong> Sean Ellis 40%+ "very disappointed"; 6-month retention — consumer social ~25%, SMB SaaS ~45%, enterprise SaaS 70–90%. <em>"If your costs grow linearly with revenue, it's fake PMF."</em></li>
+            <li><strong>Inference gross-margin guardrail:</strong> target ≥75% gross margin for agentic workflows; unoptimised frontier-token inference can collapse it to ~30%, which reads as a services business rather than a software platform.</li>
+            <li><strong>Tiered routing + semantic caching:</strong> send 85–90% of requests to reflex/SLM models, reserve frontier models for high-entropy arbitration, and serve repeat queries from cache.</li>
+            <li><strong>Pre-seed defensibility hierarchy:</strong> Customer Distribution &amp; Workflow Embedding &gt; Proprietary Domain Data &gt; Regulatory/Statutory Moat &gt; Multi-Agent Orchestration &gt; Prompt Wrappers (zero durability).</li>
+            <li><strong>PMF shows in retention:</strong> Sean Ellis 40%+ "very disappointed". <em>If your costs grow linearly with revenue, it's fake PMF.</em></li>
           </ul>
           <h4 class="font-bold text-text-primary text-[15px] mt-4">Case Studies</h4>
-          <p>Scalable Capital (€1.5bn valuation 2025) · Capsa AI ($18M Series A, 122%+ NDR) · Lovable ($600M+ ARR) · Peec AI ($10M ARR).</p>
+          <p>Deck examples for the Five Lenses: ElevenLabs (10× more places) · Lovable (replace legacy) · Stripe (market standard) · Scalable Capital (structural moat) · Cursor (execution velocity).</p>
           <h4 class="font-bold text-text-primary text-[15px] mt-4">Antler Answers — Session 4 Q&amp;A</h4>
           <p class="text-[12px] text-text-muted">Paraphrased from the session Q&amp;A, attributed to the Antler moderators. Traceable to the public <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank">Day 4 recording</a>.</p>
           <ul class="list-disc list-inside space-y-1.5">
             <li><strong>Paid pilots vs free trials</strong> — push for paid, even nominal (£5–10k); money forces procurement and proves urgency <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Richard Baillie)</em></a>.</li>
             <li><strong>Moat at pre-seed</strong> — distribution first, then proprietary data; orchestration alone is the easiest layer to copy <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Richard Baillie)</em></a>.</li>
-            <li><strong>Red flag</strong> — when the buyer's internal team wants to build it themselves <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Bazil Azmil)</em></a>.</li>
+            <li><strong>Non-revenue proof in regulated verticals</strong> — revenue is a lagging metric over 9–12-month sales cycles; leading indicators are formal regulatory engagement, clinical advisory boards, signed LOIs, and benchmark evidence beating human standards <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Bazil)</em></a>.</li>
             <li><strong>Market sizing</strong> — bottom-up; hidden labour spend, cheaper-making, or wedge into an adjacent budget; the test is a credible route to $100M+ revenue without heroic assumptions <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Richard Baillie)</em></a>.</li>
             <li><strong>Solo founders</strong> — Antler primarily backs teams; backs solo founders only in exceptional cases, with a plan to add co-founders <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Bazil Azmil)</em></a>.</li>
             <li><strong>How to reach Antler</strong> — antler.co/apply / antler.co/pitch <a class="text-accent hover:underline" href="https://cloudonair.withgoogle.com/events/google-for-startups-x-antler-immersion/watch?talk=day1-session4" rel="noopener" target="_blank"><em>(Richard Baillie)</em></a>.</li>
@@ -1509,7 +1925,7 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
       'SESSION_01': 'What did Toby Knight and Fabian Desnoes say about the Elephant &amp; Goldfish mental model for agent memory and prototyping with Google AI Studio?',
       'SESSION_02': 'How does the Agent Development Kit (ADK) compose SequentialAgent, LoopAgent and ParallelAgent topologies, and when should I use each?',
       'SESSION_03': 'Walk me through the serverless GCS to Pub/Sub to Cloud Run to BigQuery pipeline that Zack Akil demonstrated, including the /grill-me review and dead-letter queue handling.',
-      'SESSION_04': 'What are the three lenses Antler applies at pre-seed (founder-market fit, problem-solution fit, venture scale) and how does the ladder of proof fit in?'
+      'SESSION_04': 'What are the Five Lenses to make an idea bigger, and how would I apply them to an early-stage AI startup?'
     };
 
     function askAboutCurrentSession() {
@@ -1635,6 +2051,7 @@ export GFS_MCP_LLM_MODEL="deepseek-ai/DeepSeek-V4-Flash-0731"</pre></div><p clas
     window.addEventListener('DOMContentLoaded', () => {
       initTheme();
       initKeyStatus();
+      refreshCseStatus();
       renderRegistry();
       updateSessionCount();
     });

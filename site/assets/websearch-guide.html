@@ -1,0 +1,151 @@
+<!--
+  BYO Google Custom Search — step-by-step setup guide modal.
+  Shared markup: injected into both the portal home and the AI Venture Coach by
+  `openWebSearchGuide()` in assets/provider-websearch-guide.js.
+  Kept in its own file so the two pages cannot drift apart.
+-->
+<div aria-hidden="true" aria-labelledby="wsg-title" aria-modal="true"
+     class="wsg-overlay" id="wsg-modal" role="dialog">
+  <div class="wsg-dialog" role="document">
+
+    <header class="wsg-header">
+      <h2 id="wsg-title">Set up your own Google search key</h2>
+      <button aria-label="Close" class="wsg-close" id="wsg-close" type="button">&times;</button>
+    </header>
+
+    <div class="wsg-body">
+
+      <div class="wsg-intro">
+        <p>
+          The hub can fall back to a live web search when its local knowledge base
+          has no answer. You bring your own Google credentials — they are stored in
+          <strong>this browser only</strong> and are sent <strong>only to
+          googleapis.com</strong>, never to this site. This takes about 5 minutes.
+        </p>
+        <p class="wsg-note">
+          <strong>Free tier:</strong> 100 searches per day, no billing required.
+        </p>
+      </div>
+
+      <ol class="wsg-steps">
+
+        <li>
+          <h3><span class="wsg-num">1</span> Create a search engine</h3>
+          <p>
+            Open the
+            <a href="https://programmablesearchengine.google.com/controlpanel/create"
+               target="_blank" rel="noopener noreferrer">Programmable Search Engine control panel</a>.
+          </p>
+          <ul>
+            <li>Name it anything, e.g. <em>GFS Immersion Hub</em>.</li>
+            <li>
+              Under <strong>What to search</strong>, use
+              <strong>Sites to search</strong> and add the domains below —
+              <strong>one per line</strong>. Do not use commas.
+            </li>
+          </ul>
+          <pre class="wsg-domains" id="wsg-domains">cloud.google.com/*
+developers.google.com/*
+ai.google.dev/*
+codelabs.developers.google.com/*
+firebase.google.com/*
+github.com/*
+adk.dev/*</pre>
+          <p class="wsg-hint">
+            Google removed the “search the entire web” option for new engines in
+            January 2026, and caps an engine at 50 domains. These seven are the
+            official documentation sources this hub trusts.
+          </p>
+        </li>
+
+        <li>
+          <h3><span class="wsg-num">2</span> Turn on SafeSearch</h3>
+          <p>
+            In the same screen set <strong>SafeSearch &rarr; On</strong>. The hub
+            requests filtered results, so this keeps them consistent.
+          </p>
+        </li>
+
+        <li>
+          <h3><span class="wsg-num">3</span> Copy the Search engine ID</h3>
+          <p>
+            Complete the reCAPTCHA and click <strong>Create</strong>. On the next
+            screen find <strong>Search engine ID</strong> — a short string like
+            <code>a1b2c3d4e5f6g7h8i</code> — and copy it.
+          </p>
+          <p class="wsg-hint">
+            Ignore the code snippet Google offers for embedding a search box. This
+            hub queries the API directly; you do not need to paste anything into a
+            web page.
+          </p>
+        </li>
+
+        <li>
+          <h3><span class="wsg-num">4</span> Create an API key</h3>
+          <p>
+            Go to <strong>APIs &amp; Services &rarr; Credentials</strong> in your
+            Google Cloud project and click <strong>Create credentials &rarr; API key</strong>.
+          </p>
+          <ul>
+            <li>
+              If <strong>Custom Search API</strong> is not enabled yet, enable it
+              first under <strong>APIs &amp; Services &rarr; Library</strong>.
+            </li>
+            <li>
+              Under <strong>API restrictions</strong>, choose
+              <strong>Custom Search API</strong> — this makes the required
+              “API selection required” error go away.
+            </li>
+            <li>
+              Under <strong>Application restrictions</strong>, leave
+              <strong>None</strong>. The key is used from each visitor’s browser,
+              so a website restriction would break it for everyone else.
+            </li>
+          </ul>
+          <p>Copy the key — it starts with <code>AIza</code>.</p>
+        </li>
+
+        <li>
+          <h3><span class="wsg-num">5</span> Paste both values here</h3>
+          <p>
+            Close this guide and enter the two values in the
+            <strong>Live-web fallback</strong> section of the Keys dialog.
+          </p>
+          <p class="wsg-hint">
+            Tip: testing the pair in a browser tab is the fastest way to confirm it
+            works. Replace <code>KEY</code> and <code>CX</code> below and open the URL.
+          </p>
+          <pre class="wsg-domains">https://www.googleapis.com/customsearch/v1?key=KEY&amp;cx=CX&amp;q=test</pre>
+          <p class="wsg-hint">
+            A JSON response with an <code>items</code> array means both values are
+            good. <code>403</code> means the API is not enabled on that project;
+            <code>400</code> means the key or engine ID is wrong.
+          </p>
+        </li>
+
+      </ol>
+
+      <div class="wsg-warning">
+        <strong>What leaves your browser.</strong>
+        Your search key goes only to <code>googleapis.com</code>. Your question is
+        truncated to 256 characters before it is sent to Google. To show you the
+        full content of a result page (the browser cannot read those sites
+        directly), the page address — not your key and not your question — is sent
+        to this hub to retrieve the public text. Nothing is stored on the server.
+      </div>
+
+      <div class="wsg-warning wsg-warning--legacy">
+        <strong>Heads-up on Google’s roadmap.</strong>
+        Google closed the Custom Search JSON API to new customers in January 2026
+        and will discontinue it on <strong>1 January 2027</strong>. This feature
+        will need a different search provider after that date.
+      </div>
+
+    </div>
+
+    <footer class="wsg-footer">
+      <button class="wsg-btn wsg-btn--primary" id="wsg-done" type="button">Got it</button>
+    </footer>
+
+  </div>
+</div>
