@@ -1,0 +1,6 @@
+# MCP server dependencies (optional — only needed for mcp_server.py).
+#
+# The MCP surface is stdio-only and retrieval-only: no API key, no local index,
+# no hosting. Install with:
+#     pip install -r requirements-mcp.txt
+mcp>=1.0.0

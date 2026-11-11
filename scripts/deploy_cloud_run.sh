@@ -29,12 +29,34 @@ echo ""
 echo "📡 Enabling GCP APIs..."
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com --project "$PROJECT_ID"
 
-# Step 2: Build and push container image
-echo "🔨 Building container with Cloud Build..."
-# Explicit -f: 02_public_hub/Dockerfile needs the REPO ROOT as build context.
-gcloud builds submit --config 02_public_hub/scripts/cloudbuild.deploy.yaml --project "$PROJECT_ID" .
+# Step 2: Free-tier guard (must pass before build/deploy)
+echo "🛡️ Running free-tier guard..."
+python3 "$(dirname "$BASH_SOURCE")"/../../scripts/free_tier_guard.py \
+  --min-instances 0 \
+  --memory 1Gi \
+  --cpu 1 \
+  --region "$REGION"
 
-# Step 3: Deploy to Cloud Run (free-tier compatible: 1 vCPU, 1 GiB, min-instances=0)
+# Step 3: Headless-browser verification gate
+echo "🎭 Running Sprint 18 headless-browser verification harness..."
+# Optional extra import root for a larger development checkout; unset in the public repo.
+PYTHONPATH="${GFS_DEV_TREE:+${GFS_DEV_TREE}:}$(dirname "$BASH_SOURCE")/.." \
+  python3 -m pytest tests/e2e/test_sprint18_portal_e2e.py -q
+if [ $? -ne 0 ]; then
+  echo "REFUSING: headless-browser verification harness failed." >&2
+  exit 78
+fi
+
+# Step 4: Build and push container image
+echo "🔨 Building container with Cloud Build..."
+# 02_public_hub is the self-sufficient build root (Dockerfile COPYs site/, crawl/,
+# data/, prompts/ relative to it). Submit from within it.
+(
+  cd "$(dirname "$BASH_SOURCE")"/.. && \
+  gcloud builds submit --config scripts/cloudbuild.deploy.yaml --project "$PROJECT_ID" .
+)
+
+# Step 4: Deploy to Cloud Run (free-tier compatible: 1 vCPU, 1 GiB, min-instances=0)
 # Design §11 mandates --memory 1Gi for the fastembed + onnxruntime stack.
 echo "☁️ Deploying to Cloud Run..."
 gcloud run deploy "$SERVICE_NAME" \
@@ -51,7 +73,7 @@ gcloud run deploy "$SERVICE_NAME" \
   --set-env-vars "GFS_DB_PATH=/app/data/gfs_immersion_2026.sqlite" \
   --project "$PROJECT_ID"
 
-# Step 4: Show deployed URL
+# Step 5: Show deployed URL
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format 'value(status.url)' --project "$PROJECT_ID")
 echo ""
 echo "✅ Deployment complete!"

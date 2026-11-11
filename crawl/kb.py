@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import re
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -95,6 +96,50 @@ def init_knowledge_base(conn: sqlite3.Connection, embed_dim: int = EMBED_DIM) ->
         );
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_facts_topic ON facts(topic);")
+
+    # Sprint 16: chunk-quality metadata tables for future rerankers.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS session_chunk_meta (
+            chunk_id      TEXT PRIMARY KEY,
+            keywords      TEXT,
+            entities      TEXT,
+            token_count   INTEGER,
+            framework_tags TEXT
+        );
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS doc_chunk_meta (
+            chunk_id      TEXT PRIMARY KEY,
+            keywords      TEXT,
+            entities      TEXT,
+            token_count   INTEGER,
+            product_tag   TEXT
+        );
+    """)
+
+    # Sprint 16: deterministic anchor-to-chunk mapping.
+    # provenance_origin distinguishes anchors traceable to the Session 04
+    # synthesis (session_synthesis) from anchors that are not traceable to it
+    # (external_public). The retrieval/answer path surfaces this value so
+    # external-public anchors are never reported as Session-04 citations.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS framework_anchors (
+            anchor_id         TEXT PRIMARY KEY,
+            anchor            TEXT NOT NULL,
+            provenance_origin TEXT NOT NULL DEFAULT 'session_synthesis',
+            chunk_id          TEXT NOT NULL,
+            scope             TEXT NOT NULL,
+            source_url        TEXT,
+            notes             TEXT,
+            updated_at        TEXT NOT NULL
+        );
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_anchors_anchor ON framework_anchors(anchor);
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_anchors_chunk_id ON framework_anchors(chunk_id);
+    """)
 
     # 2. Full-text search (FTS5) for crawled document chunks
     cursor.execute("""
@@ -308,6 +353,19 @@ def upsert_document(
         for c in chunks:
             cursor.execute("DELETE FROM vec_chunks WHERE chunk_id = ?;", (c.chunk_id,))
 
+        # Sprint 16: clear old doc_chunk_meta for this document and rewrite.
+        cursor.execute("DELETE FROM doc_chunk_meta WHERE chunk_id LIKE ?;", (f"{doc_id}#%",))
+        for c in chunks:
+            c_id = c.chunk_id if c.chunk_id.startswith(f"{doc_id}#") else f"{doc_id}#{c.chunk_index:04d}"
+            meta = _extract_chunk_meta(c.text, product_tag=product)
+            cursor.execute("""
+                INSERT INTO doc_chunk_meta (
+                    chunk_id, keywords, entities, token_count, product_tag
+                ) VALUES (?, ?, ?, ?, ?);
+            """, (
+                c_id, meta["keywords"], meta["entities"], meta["token_count"], meta["product_tag"]
+            ))
+
         # 3. Insert new FTS5 chunks
         for c in chunks:
             c_id = c.chunk_id if c.chunk_id.startswith(f"{doc_id}#") else f"{doc_id}#{c.chunk_index:04d}"
@@ -343,3 +401,263 @@ def upsert_document(
         )
 
     return doc_id
+
+
+# ── Sprint 16 metadata extraction (lightweight, CPU-only) ─────────────
+
+_STOPWORDS = {
+    "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
+    "to", "of", "and", "or", "for", "in", "on", "at", "by", "with", "from",
+    "as", "it", "its", "this", "that", "these", "those", "we", "you", "your",
+    "our", "their", "there", "them", "they", "he", "she", "his", "her",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "can", "shall", "about", "into", "through",
+    "during", "before", "after", "above", "below", "between", "under",
+}
+
+_ENTITY_RE = re.compile(r"\b[A-Z][a-zA-Z0-9]+(?:\s+(?:&|and)?\s*[A-Z][a-zA-Z0-9]+)*\b")
+
+
+def _extract_keywords(text: str) -> str:
+    """Extract a small set of content-bearing terms (CPU-only)."""
+    lowered = (text or "").lower()
+    # Keep alphanumeric tokens with internal dashes (e.g. "vertex-ai")
+    tokens = re.findall(r"[a-z0-9]+(?:[-_][a-z0-9]+)*", lowered)
+    counts: Dict[str, int] = {}
+    for t in tokens:
+        if t in _STOPWORDS or len(t) <= 2:
+            continue
+        counts[t] = counts.get(t, 0) + 1
+    # Pick terms with frequency >= 2, longest first, capped at 12.
+    frequent = [t for t, c in counts.items() if c >= 2]
+    frequent.sort(key=lambda x: (-len(x), x))
+    if not frequent:
+        # fall back to longer singletons
+        frequent = sorted(counts.keys(), key=lambda x: (-len(x), x))[:8]
+    return ", ".join(frequent[:12])
+
+
+def _extract_entities(text: str) -> str:
+    """Extract likely named entities from title-case runs (CPU-only)."""
+    seen = set()
+    out = []
+    for match in _ENTITY_RE.finditer(text or ""):
+        ent = match.group(0).strip()
+        # Drop standalone common words that can be title-cased by accident.
+        if ent.lower() in _STOPWORDS or len(ent) <= 2:
+            continue
+        key = ent.lower()
+        if key not in seen:
+            seen.add(key)
+            out.append(ent)
+    return ", ".join(out[:10])
+
+
+def _token_count_approx(text: str) -> int:
+    """Approximate token count for metadata (whitespace split)."""
+    return len(re.findall(r"\b\w+\b", text or ""))
+
+
+def _extract_chunk_meta(text: str, product_tag: str | None = None) -> Dict[str, Any]:
+    """Build a doc_chunk_meta row from chunk text."""
+    return {
+        "keywords": _extract_keywords(text),
+        "entities": _extract_entities(text),
+        "token_count": _token_count_approx(text),
+        "product_tag": product_tag or "",
+    }
+
+
+def backfill_doc_chunk_meta(conn: sqlite3.Connection) -> int:
+    """Populate missing doc_chunk_meta rows for existing doc_chunks.
+
+    Idempotent: only inserts rows whose chunk_id is not already present.
+    Uses CPU-only heuristics and reads product from the docs table.
+    Returns the number of rows inserted.
+    """
+    cursor = conn.cursor()
+    cursor.execute(
+        """
+        SELECT dc.chunk_id, dc.text, d.product
+        FROM doc_chunks AS dc
+        JOIN docs AS d ON d.doc_id = dc.doc_id
+        WHERE dc.chunk_id NOT IN (SELECT chunk_id FROM doc_chunk_meta);
+        """
+    )
+    rows = cursor.fetchall()
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    inserted = 0
+    for row in rows:
+        meta = _extract_chunk_meta(str(row["text"] or ""), product_tag=str(row["product"] or ""))
+        cursor.execute(
+            """
+            INSERT INTO doc_chunk_meta (
+                chunk_id, keywords, entities, token_count, product_tag
+            ) VALUES (?, ?, ?, ?, ?);
+            """,
+            (
+                str(row["chunk_id"]),
+                meta["keywords"],
+                meta["entities"],
+                meta["token_count"],
+                meta["product_tag"],
+            ),
+        )
+        inserted += 1
+
+    conn.commit()
+    return inserted
+
+
+def upsert_session_chunk_meta(conn: sqlite3.Connection) -> int:
+    """Populate session_chunk_meta for every immersion_chunks row.
+
+    Idempotent: deletes and repopulates. Uses CPU-only heuristics.
+    Returns the number of rows written.
+    """
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM session_chunk_meta;")
+    cursor.execute(
+        "SELECT chunk_id, session_id, title, category, content FROM immersion_chunks;"
+    )
+    rows = cursor.fetchall()
+
+    now_iso = datetime.now(timezone.utc).isoformat()
+    inserted = 0
+    for row in rows:
+        content = str(row["content"] or "")
+        title = str(row["title"] or "")
+        combined = f"{title} {content}".lower()
+        tags = []
+        if "five lenses" in combined:
+            tags.append("Five Lenses")
+        if "sean ellis" in combined:
+            tags.append("Sean Ellis")
+        if "gross margin" in combined or "75%" in combined:
+            tags.append("Unit Economics")
+        if "defensibility" in combined:
+            tags.append("Defensibility Hierarchy")
+        if "ten x" in combined or "10x" in combined:
+            tags.append("10x Lens")
+        framework_tag_str = ", ".join(tags)
+
+        cursor.execute(
+            """
+            INSERT INTO session_chunk_meta (
+                chunk_id, keywords, entities, token_count, framework_tags
+            ) VALUES (?, ?, ?, ?, ?);
+            """,
+            (
+                str(row["chunk_id"]),
+                _extract_keywords(content),
+                _extract_entities(content),
+                _token_count_approx(content),
+                framework_tag_str,
+            ),
+        )
+        inserted += 1
+
+    conn.commit()
+    return inserted
+
+
+def seed_framework_anchors(conn: sqlite3.Connection) -> Dict[str, Any]:
+    """Seed framework_anchors from the indexed session/doc corpus.
+
+    Anchors map a canonical phrase to an existing chunk_id. If the target
+    chunk cannot be found, the anchor is skipped and recorded in the returned
+    dict so callers can decide whether to fail the sprint.
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    cursor = conn.cursor()
+
+    # Session anchors are drawn from the session syntheses.
+    session_source_file = "session_syntheses"
+    session_anchors = [
+        ("Five Lenses", "session_synthesis", "Five Lenses framework and deck examples"),
+        ("Sean Ellis 40%", "external_public", "Sean Ellis product/market-fit 40% heuristic"),
+        ("Gross Margin 75%", "session_synthesis", "Unit-economics gross-margin anchor"),
+        ("Defensibility Hierarchy", "session_synthesis", "Pre-seed defensibility hierarchy"),
+    ]
+
+    inserted = 0
+    skipped: List[Tuple[str, str]] = []
+
+    cursor.execute("DELETE FROM framework_anchors WHERE scope = 'session';")
+
+    for anchor, provenance, notes in session_anchors:
+        # Match by lower-cased anchor substring in content; prefer chunks
+        # whose source_file contains FRAMEWORK_ANCHORS.
+        cursor.execute(
+            """
+            SELECT chunk_id, content, source_file
+            FROM immersion_chunks
+            WHERE lower(content) LIKE ? OR lower(title) LIKE ?
+            ORDER BY
+                CASE WHEN source_file LIKE ? THEN 0 ELSE 1 END,
+                CASE WHEN lower(title) LIKE ? THEN 0 ELSE 1 END,
+                length(content) DESC
+            LIMIT 1;
+            """,
+            (f"%{anchor.lower()}%", f"%{anchor.lower()}%", "%FRAMEWORK_ANCHORS%", f"%{anchor.lower()}%"),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            skipped.append(("session", anchor))
+            continue
+        chunk_id = str(row["chunk_id"])
+        anchor_id = hashlib.sha256(f"session:{anchor}:{chunk_id}".encode()).hexdigest()
+        cursor.execute(
+            """
+            INSERT INTO framework_anchors (
+                anchor_id, anchor, provenance_origin, chunk_id, scope, source_url, notes, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (anchor_id, anchor, provenance, chunk_id, "session", session_source_file, notes, now_iso),
+        )
+        inserted += 1
+
+    # Document anchors for the new RAG/grounding products crawled in Sprint 16.
+    doc_anchors = [
+        ("Vertex AI RAG Engine", "Vertex AI RAG Engine", "Vertex AI RAG Engine overview"),
+        ("Agent Builder RAG", "Agent Builder RAG", "Agent Builder RAG overview"),
+        ("ADK RAG tool", "ADK RAG tool", "ADK RAG tool / retrieval codelab"),
+        ("Gemini API grounding", "Gemini API grounding", "Gemini API grounding"),
+        ("Vertex AI Search grounding", "Vertex AI Search grounding", "Vertex AI Search grounding"),
+    ]
+
+    cursor.execute("DELETE FROM framework_anchors WHERE scope = 'doc';")
+
+    for anchor, product, notes in doc_anchors:
+        # Find a chunk from a doc with the matching product.
+        cursor.execute(
+            """
+            SELECT dc.chunk_id, d.source_url
+            FROM doc_chunks AS dc
+            JOIN docs AS d ON d.doc_id = dc.doc_id
+            WHERE d.product = ?
+            ORDER BY dc.chunk_index ASC
+            LIMIT 1;
+            """,
+            (product,),
+        )
+        row = cursor.fetchone()
+        if row is None:
+            skipped.append(("doc", anchor))
+            continue
+        chunk_id = str(row["chunk_id"])
+        source_url = str(row["source_url"])
+        anchor_id = hashlib.sha256(f"doc:{anchor}:{chunk_id}".encode()).hexdigest()
+        cursor.execute(
+            """
+            INSERT INTO framework_anchors (
+                anchor_id, anchor, provenance_origin, chunk_id, scope, source_url, notes, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """,
+            (anchor_id, anchor, "external_public", chunk_id, "doc", source_url, notes, now_iso),
+        )
+        inserted += 1
+
+    conn.commit()
+    return {"inserted": inserted, "skipped": skipped}

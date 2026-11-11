@@ -99,6 +99,7 @@ class KnowledgeBaseBuilder:
         user_agent: str = DEFAULT_USER_AGENT,
         embedding_engine: Optional[EmbeddingEngine] = None,
         fetcher: Optional[Fetcher] = None,
+        extra_urls_path: Optional[Path | str] = None,
     ) -> None:
         self.registry_path = Path(registry_path)
         self.db_path = Path(db_path)
@@ -108,6 +109,7 @@ class KnowledgeBaseBuilder:
         self.embedding_engine = embedding_engine
         self.fetcher = fetcher or Fetcher(user_agent=self.user_agent)
         self.robots_cache = RobotsCache(user_agent=self.user_agent)
+        self.extra_urls_path = Path(extra_urls_path) if extra_urls_path else None
 
     def load_registry(self) -> Dict[str, Any]:
         """Load and parse the tiered seed registry."""
@@ -118,6 +120,26 @@ class KnowledgeBaseBuilder:
         if "tiers" not in data or len(data["tiers"]) < 3:
             raise ValueError("Registry must contain at least 3 tiers (A, B, C)")
         return data
+
+    def _load_extra_urls(self) -> List[Dict[str, Any]]:
+        """Load optional deep-crawl URL list (Tier A candidates)."""
+        if not self.extra_urls_path or not self.extra_urls_path.exists():
+            return []
+        with open(self.extra_urls_path, "r", encoding="utf-8") as f:
+            data = yaml.safe_load(f)
+        urls = data.get("urls", []) if isinstance(data, dict) else []
+        candidates = []
+        for entry in urls:
+            if not isinstance(entry, dict) or "url" not in entry:
+                continue
+            candidates.append({
+                "url": str(entry["url"]),
+                "product": str(entry.get("product", "Unknown")),
+                "tier": str(entry.get("tier", "A")),
+                "license": str(entry.get("license", "unknown")),
+                "cadence": str(entry.get("cadence", "daily")),
+            })
+        return candidates
 
     def run(
         self,
@@ -162,6 +184,13 @@ class KnowledgeBaseBuilder:
         # Gather target URLs per tier, with higher tiers taking deduplication precedence
         seen_urls: Set[str] = set()
         candidates_by_tier: Dict[str, List[Dict[str, Any]]] = {"A": [], "B": [], "C": []}
+
+        # Inject optional deep-crawl URLs as Tier A candidates first, so they are
+        # processed before registry sitemap discovery fills the batch budget.
+        for candidate in self._load_extra_urls():
+            if candidate["url"] not in seen_urls:
+                seen_urls.add(candidate["url"])
+                candidates_by_tier["A"].append(candidate)
 
         with httpx.Client(
             headers={"User-Agent": self.user_agent},
@@ -519,7 +548,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="GFS Immersion Hub Knowledge Pipeline Build (P1 / P1.5)")
     parser.add_argument(
         "--registry",
-        default="01_harvester_pipeline/crawl/seed_registry.yaml",
+        default="crawl/seed_registry.yaml",
         help="Path to seed_registry.yaml",
     )
     parser.add_argument(
@@ -529,7 +558,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--report",
-        default="01_harvester_pipeline/work/crawl_report.json",
+        default="work/crawl_report.json",
         help="Path to output crawl_report.json",
     )
     parser.add_argument(
@@ -566,6 +595,11 @@ def main() -> None:
         action="store_true",
         help="Suppress per-document log lines (heartbeats remain active)",
     )
+    parser.add_argument(
+        "--extra-urls",
+        default=None,
+        help="Path to YAML file with additional Tier A deep-crawl URLs",
+    )
 
     args = parser.parse_args()
     builder = KnowledgeBaseBuilder(
@@ -573,6 +607,7 @@ def main() -> None:
         db_path=args.db,
         report_path=args.report,
         corpus_cap=args.corpus_cap,
+        extra_urls_path=args.extra_urls,
     )
 
     try:

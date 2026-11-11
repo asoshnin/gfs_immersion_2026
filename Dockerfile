@@ -37,6 +37,23 @@ RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BA
     test -n "$(ls -A /app/.fastembed_cache)" && \
     echo "embedder baked: $(du -sh /app/.fastembed_cache | cut -f1)"
 
+# Bake the Sprint 18 CPU reranker into the image the same way (audit DOM-32).
+# The 22.6 MB int8 MiniLM cross-encoder is a BUILD ARTIFACT, not source: it is
+# fetched here so it is never committed to the repo (publish boundary intact)
+# and the runtime container needs no network. The size cap is enforced at build
+# time, so an oversized artifact fails the build rather than silently no-oping.
+#
+# ORDER MATTERS: this must run BEFORE `HF_HUB_OFFLINE=1` below. The downloader
+# uses huggingface_hub, which honors that flag and raises OfflineModeIsEnabled.
+# crawl/ and scripts/ are copied further down, so the copy is staged here first.
+COPY crawl/ crawl/
+COPY scripts/download_reranker.py scripts/download_reranker.py
+RUN python scripts/download_reranker.py \
+        --model Xenova/ms-marco-MiniLM-L-6-v2 \
+        --output /app/crawl/models/reranker \
+        --max-mb 150 && \
+    echo "reranker baked: $(du -sh /app/crawl/models/reranker | cut -f1)"
+
 # Only NOW go offline: the build may download, the runtime must not.
 ENV HF_HUB_OFFLINE=1
 
@@ -53,9 +70,6 @@ COPY site/ site/
 COPY prompts/ prompts/
 # FTS5 database is STAGED into ./data/ before build (see runbook §7)
 COPY data/ data/
-
-# Vendored retrieval core (crawl.retrieve / crawl.freshness / crawl.embed / crawl.kb)
-COPY crawl/ crawl/
 
 RUN chown -R gfsuser:gfsgroup /app
 
