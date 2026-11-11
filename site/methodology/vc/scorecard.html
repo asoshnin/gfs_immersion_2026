@@ -18,6 +18,8 @@
     }
     * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
     body { background: var(--bg); color: var(--text); padding: 24px; line-height: 1.5; }
+    .back-link { display: inline-block; margin: 0 0 10px; font-size: 13px; color: var(--text); opacity: .75; text-decoration: none; }
+    .back-link:hover { opacity: 1; text-decoration: underline; }
     .scorecard-container { max-width: 800px; margin: 0 auto; }
     .header { margin-bottom: 24px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
     .header h2 { font-size: 1.5rem; color: var(--text); margin-bottom: 6px; }
@@ -41,6 +43,26 @@
   </style>
 </head>
 <body>
+  <a href="/" id="back-link" class="back-link" aria-label="Go back to the hub">&larr; Back</a>
+  <script>
+  (function () {
+    // Sprint 24b: history.back() is a no-op when the page was opened in a NEW TAB
+    // (history has a single entry), and swallowing the default left the user with
+    // nothing happening. Navigate deterministically instead: return to the
+    // same-origin referrer when we have one, otherwise follow href="/".
+    var a = document.getElementById('back-link');
+    a.addEventListener('click', function (e) {
+      try {
+        var ref = document.referrer;
+        if (ref && ref.indexOf(location.origin) === 0 &&
+            ref.split('#')[0] !== location.href.split('#')[0]) {
+          e.preventDefault();
+          location.assign(ref);
+        }
+      } catch (err) { /* fall through to href="/" */ }
+    });
+  })();
+  </script>
   <div class="scorecard-container">
     <div class="header">
       <h2>📈 VC Readiness Scorecard</h2>
