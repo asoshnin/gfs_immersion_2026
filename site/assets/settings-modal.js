@@ -7,12 +7,12 @@
  * and ai-coach.html's #phase-gate was deleted.
  *
  * Element ids are deliberately unchanged (settings-modal, provider-url,
- * provider-model, llm-key, cse-key, cse-cx, settings-status) so existing tests and
+ * provider-model, llm-key, cse-key, settings-status) so existing tests and
  * page-level handlers keep working.
  *
  * Storage keys are the portal's shared namespace: gfs_llm_key, gfs_llm_base,
  * gfs_llm_model, gfs_llm_origin, gfs_llm_override, and the WebSearch module's
- * gfs_cse_* keys. No credential ever leaves the browser except to the provider.
+ * gfs_keenable_key. No credential ever leaves the browser except to the provider.
  */
 
 const MODAL_ID = 'settings-modal';
@@ -39,6 +39,20 @@ const MODAL_HTML = `<div aria-hidden="true" aria-modal="true" class="hidden fixe
 <label class="block font-medium text-text-primary" for="provider-model">Model ID</label>
 <input class="w-full h-9 px-3 rounded-md border border-border bg-canvas text-text-primary font-mono text-[12px] focus:outline-none focus:border-accent" id="provider-model" type="text" value="google/gemini-2.5-flash-lite:free"/>
 </div>
+<!-- Field 2b: Auth header (Azure/APIM differ from OpenAI) -->
+<div class="space-y-1">
+<label class="block font-medium text-text-primary" for="provider-auth-scheme">Auth header</label>
+<select class="w-full h-9 px-3 rounded-md border border-border bg-canvas text-text-primary text-[12px] focus:outline-none focus:border-accent" id="provider-auth-scheme">
+<option value="auto">Auto-detect (recommended)</option>
+<option value="api-key">api-key (Azure AI Foundry / Azure OpenAI)</option>
+<option value="bearer">Authorization: Bearer (OpenAI, OpenRouter)</option>
+<option value="ocp-apim">Ocp-Apim-Subscription-Key (APIM gateway)</option>
+</select>
+<p class="text-[10px] text-text-muted">
+              Azure rejects <code class="font-mono">Bearer</code> and answers with a 401 that says the key is invalid even when it is not.
+              Auto-detect tries each header until one is accepted.
+            </p>
+</div>
 <!-- Field 3: API Key -->
 <div class="space-y-1">
 <label class="block font-medium text-text-primary" for="llm-key">API Key (Masked Password Field)</label>
@@ -57,29 +71,30 @@ const MODAL_HTML = `<div aria-hidden="true" aria-modal="true" class="hidden fixe
 <span class="font-medium text-text-primary text-[12px]">Live-web fallback (optional)</span>
 <span class="text-[10px] px-1.5 py-0.5 rounded-sm bg-accent-tint text-accent font-mono" id="cse-status">not configured</span>
 </div>
-<p class="text-[11px] text-text-muted">
-            Bring your own Google Custom Search credentials. They are stored in this browser only and sent
-            directly to <code class="font-mono">googleapis.com</code> — never to this site's origin. Free tier: 100 queries/day.
+          <p class="text-[11px] text-text-muted">
+            Bring your own Keenable search key — one key, no search-engine ID. Stored in this browser
+            only and sent directly to <code class="font-mono">api.keenable.ai</code>, never to this
+            site's origin. Leave it empty to use the shared, rate-limited public tier.
           </p>
-<div class="space-y-1">
-<label class="block font-medium text-text-primary text-[12px]" for="cse-key">Google API Key</label>
-<input class="w-full h-9 px-3 rounded-md border border-border bg-canvas text-text-primary font-mono text-[12px] focus:outline-none focus:border-accent" id="cse-key" type="password" autocomplete="off" placeholder="AIza..."/>
-</div>
-<div class="space-y-1">
-<label class="block font-medium text-text-primary text-[12px]" for="cse-cx">Search Engine ID (cx)</label>
-<input class="w-full h-9 px-3 rounded-md border border-border bg-canvas text-text-primary font-mono text-[12px] focus:outline-none focus:border-accent" id="cse-cx" type="text" autocomplete="off" placeholder="a1b2c3d4e5f6g7h8i"/>
-</div>
-<div class="flex items-center gap-2 flex-wrap">
-<button class="px-3 py-1.5 rounded-md border border-border text-text-secondary hover:text-text-primary text-[12px] font-medium" onclick="forgetSearchCreds()">
-              Forget search credentials
+          <div class="space-y-1">
+            <label class="block font-medium text-text-primary text-[12px]" for="cse-key">Keenable API key</label>
+            <input class="w-full h-9 px-3 rounded-md border border-border bg-canvas text-text-primary font-mono text-[12px] focus:outline-none focus:border-accent" id="cse-key" type="password" autocomplete="off" placeholder="keen_..."/>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <button class="px-3 py-1.5 rounded-md border border-border text-text-secondary hover:text-text-primary text-[12px] font-medium" onclick="forgetSearchCreds()">
+              Forget search key
             </button>
-<a class="text-accent text-[11px] font-bold hover:underline" href="https://programmablesearchengine.google.com/controlpanel/all" rel="noopener noreferrer" target="_blank">
-              Get a search engine ID →
+            <button class="px-3 py-1.5 rounded-md border border-accent text-accent hover:bg-accent-tint text-[12px] font-medium" id="cse-test-btn" type="button" onclick="testSearchCreds()">
+              Test credentials
+            </button>
+            <a class="text-accent text-[11px] font-bold hover:underline" href="https://app.keenable.ai/console/api-keys" rel="noopener noreferrer" target="_blank">
+              Get a Keenable key →
             </a>
-<button class="text-accent text-[11px] font-bold hover:underline" onclick="window.openWebSearchGuide && window.openWebSearchGuide()" type="button">
+            <button class="text-accent text-[11px] font-bold hover:underline" onclick="window.openWebSearchGuide && window.openWebSearchGuide()" type="button">
               📖 Step-by-step setup guide
             </button>
-</div>
+          </div>
+<div class="text-[11px] pt-1" id="cse-test-result" role="status" aria-live="polite"></div>
 </div>
 
 <div class="flex items-center justify-between pt-2 border-t border-border">
@@ -162,10 +177,17 @@ export function populateCseFields() {
   } catch (e) {
     creds = null;
   }
-  const cxEl = el('cse-cx');
   const keyEl = el('cse-key');
-  if (cxEl) cxEl.value = creds ? creds.cx : '';
-  if (keyEl) keyEl.placeholder = creds ? '•••••• saved — leave blank to keep' : 'AIza...';
+  if (keyEl) keyEl.placeholder = creds ? '•••••• saved — leave blank to keep' : 'keen_...';
+
+  // Reflect the saved auth header so an Azure user sees what worked last time.
+  const schemeEl = el('provider-auth-scheme');
+  if (schemeEl) {
+    let saved = 'auto';
+    try { saved = localStorage.getItem('gfs_llm_auth_scheme') || 'auto'; } catch (e) {}
+    schemeEl.value = saved;
+  }
+
   refreshCseStatus();
 }
 
@@ -194,6 +216,11 @@ export function saveKeySettings() {
   if (url && !/^https?:\/\//i.test(url)) { status('Base URL must start with http:// or https://', 'danger'); return; }
   if (model && !/^[A-Za-z0-9._\-\/:@]+$/.test(model)) { status('Model id contains unsupported characters.', 'danger'); return; }
 
+  const schemeEl = el('provider-auth-scheme');
+  if (schemeEl) {
+    try { localStorage.setItem('gfs_llm_auth_scheme', schemeEl.value || 'auto'); } catch (e) {}
+  }
+
   if (url) localStorage.setItem(LLM_STORAGE.base, url.replace(/\/+$/, ''));
   if (model) localStorage.setItem(LLM_STORAGE.model, model);
   if (keyInput) localStorage.setItem(LLM_STORAGE.key, keyInput);
@@ -203,13 +230,10 @@ export function saveKeySettings() {
   if (override) localStorage.setItem(LLM_STORAGE.override, override.checked ? 'true' : 'false');
 
   const cseKeyEl = el('cse-key');
-  const cseCxEl = el('cse-cx');
   const cseKey = cseKeyEl ? cseKeyEl.value.trim() : '';
-  const cseCx = cseCxEl ? cseCxEl.value.trim() : '';
-  if (cseKey || cseCx) {
-    if (window.WebSearch) window.WebSearch.saveSearchCredentials(cseKey, cseCx);
+  if (cseKey) {
+    if (window.WebSearch) window.WebSearch.saveSearchCredentials(cseKey);
     if (cseKeyEl) cseKeyEl.value = '';
-    if (cseCxEl) cseCxEl.value = '';
   }
   refreshCseStatus();
   status('Saved — your provider settings are active in this browser.', 'success');
@@ -226,17 +250,69 @@ export function refreshCseStatus() {
   const node = el('cse-status');
   if (!node) return;
   const ok = !!(window.WebSearch && window.WebSearch.isWebSearchConfigured());
-  node.textContent = ok ? 'configured' : 'not configured';
+  node.textContent = ok ? 'configured' : 'public tier';
   node.className = ok ? 'text-success' : '';
 }
 
 export function forgetSearchCreds() {
   if (window.WebSearch) window.WebSearch.clearSearchCredentials();
-  const k = el('cse-key'); const c = el('cse-cx');
-  if (k) { k.value = ''; k.placeholder = 'AIza...'; }
-  if (c) c.value = '';
+  const k = el('cse-key');
+  if (k) { k.value = ''; k.placeholder = 'keen_...'; }
   refreshCseStatus();
-  status('Search credentials removed from this browser.', 'success');
+  status('Search key removed from this browser.', 'success');
+}
+
+/**
+ * Run one real query against Keenable with the current credentials and report
+ * exactly what the provider said. Uses the saved key when the field is empty
+ * (the saved key is never echoed back into the input), and falls back to the
+ * keyless public tier so the button is useful before any key exists.
+ */
+export async function testSearchCreds() {
+  const out = el('cse-test-result');
+  const keyEl = el('cse-key');
+  const saved = (window.WebSearch && window.WebSearch.getSearchCredentials)
+    ? window.WebSearch.getSearchCredentials() : null;
+  const key = (keyEl && keyEl.value.trim()) || (saved && saved.key) || '';
+  const keyless = !key;
+
+  if (out) {
+    out.className = 'text-[11px] pt-1 text-text-muted';
+    out.textContent = keyless ? 'Testing the public tier (no key set)…' : 'Testing…';
+  }
+
+  const res = await window.WebSearch.searchWeb(
+    'agent development kit',
+    keyless ? null : { key: key },
+    { num: 3, keyless: keyless }
+  );
+
+  const explain = {
+    bad_key: 'Keenable rejected the API key. Check it starts with “keen_” and is active in the console.',
+    no_credentials: 'Add an API key, or leave the field empty to use the public tier.',
+    no_credits: 'This key is out of credits. Add credits in the Keenable console — do not retry.',
+    key_rejected: 'The key was rejected or revoked. Create a new one at app.keenable.ai/console/api-keys.',
+    throttled_local: 'Wait a second — the Test button runs one search at a time. Try again.',
+    throttled: 'Keenable rate limit reached. Wait a moment, then retry.',
+    missing_app_title: 'The keyless request needs an app identifier — this is a site bug, not your key.',
+    bad_request: 'Keenable rejected the request parameters.',
+    unusable_page: 'Keenable could not extract content for that query.',
+    network_error: 'Could not reach Keenable (network or ad-blocker).',
+    provider_error: 'Keenable had a server error. Retry in a moment.'
+  }[res.reason] || ('Search failed (' + res.reason + ').');
+
+  if (!out) return;
+  if (res.ok) {
+    const n = res.snippets ? res.snippets.length : 0;
+    out.className = 'text-[11px] pt-1 text-success';
+    out.textContent =
+      '✓ Working — Keenable returned ' + n + ' result(s)'
+      + (keyless ? ' on the public tier. Save a key for higher limits.' : '.')
+      + (res.confidence === 'off_list' ? ' (none on the trusted-domain list — shown with a caution label)' : '');
+  } else {
+    out.className = 'text-[11px] pt-1 text-warning';
+    out.textContent = '✗ ' + explain + (res.detail ? ' Keenable said: “' + res.detail + '”' : '');
+  }
 }
 
 /**
@@ -251,11 +327,13 @@ export function installGlobals() {
   if (!window.saveKeySettings) window.saveKeySettings = saveKeySettings;
   if (!window.forgetKey) window.forgetKey = forgetKey;
   if (!window.forgetSearchCreds) window.forgetSearchCreds = forgetSearchCreds;
+  if (!window.testSearchCreds) window.testSearchCreds = testSearchCreds;
   if (!window.refreshCseStatus) window.refreshCseStatus = refreshCseStatus;
   if (!window.populateCseFields) window.populateCseFields = populateCseFields;
 }
 
 export default {
   ensureSettingsModal, openSettingsModal, closeSettingsModal,
-  saveKeySettings, forgetKey, forgetSearchCreds, refreshCseStatus, populateCseFields, installGlobals
+  saveKeySettings, forgetKey, forgetSearchCreds, testSearchCreds,
+  refreshCseStatus, populateCseFields, installGlobals
 };

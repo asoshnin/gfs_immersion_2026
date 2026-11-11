@@ -1,5 +1,5 @@
 <!--
-  BYO Google Custom Search — step-by-step setup guide modal.
+  BYO Keenable search — step-by-step setup guide modal.
   Shared markup: injected into both the portal home and the AI Venture Coach by
   `openWebSearchGuide()` in assets/provider-websearch-guide.js.
   Kept in its own file so the two pages cannot drift apart.
@@ -9,7 +9,7 @@
   <div class="wsg-dialog" role="document">
 
     <header class="wsg-header">
-      <h2 id="wsg-title">Set up your own Google search key</h2>
+      <h2 id="wsg-title">Set up your own search key</h2>
       <button aria-label="Close" class="wsg-close" id="wsg-close" type="button">&times;</button>
     </header>
 
@@ -18,127 +18,103 @@
       <div class="wsg-intro">
         <p>
           The hub can fall back to a live web search when its local knowledge base
-          has no answer. You bring your own Google credentials — they are stored in
-          <strong>this browser only</strong> and are sent <strong>only to
-          googleapis.com</strong>, never to this site. This takes about 5 minutes.
+          has no answer. You can use the shared public tier with no setup at all, or
+          bring your own <strong>Keenable</strong> key for higher limits. A key is
+          stored in <strong>this browser only</strong> and is sent <strong>only to
+          api.keenable.ai</strong>, never to this site.
         </p>
         <p class="wsg-note">
-          <strong>Free tier:</strong> 100 searches per day, no billing required.
+          <strong>No key needed to try it.</strong> The public tier allows 1,000
+          searches per hour per IP. A free key raises the limits and is your own quota.
         </p>
       </div>
 
       <ol class="wsg-steps">
 
         <li>
-          <h3><span class="wsg-num">1</span> Create a search engine</h3>
+          <h3><span class="wsg-num">1</span> Open the Keenable console</h3>
           <p>
-            Open the
-            <a href="https://programmablesearchengine.google.com/controlpanel/create"
-               target="_blank" rel="noopener noreferrer">Programmable Search Engine control panel</a>.
+            Go to
+            <a href="https://app.keenable.ai/console/api-keys"
+               target="_blank" rel="noopener noreferrer">app.keenable.ai/console/api-keys</a>
+            and sign in (or create a free account).
           </p>
-          <ul>
-            <li>Name it anything, e.g. <em>GFS Immersion Hub</em>.</li>
-            <li>
-              Under <strong>What to search</strong>, use
-              <strong>Sites to search</strong> and add the domains below —
-              <strong>one per line</strong>. Do not use commas.
-            </li>
-          </ul>
-          <pre class="wsg-domains" id="wsg-domains">cloud.google.com/*
+        </li>
+
+        <li>
+          <h3><span class="wsg-num">2</span> Create an API key</h3>
+          <p>
+            Click <em>Create key</em> and copy the value. Keenable keys start with
+            <code>keen_</code>. Treat it like a password — it bills against your
+            account.
+          </p>
+          <p class="wsg-note">
+            There is no second identifier. Unlike Google's Custom Search you do
+            <strong>not</strong> need an engine ID or project setup — one key is the
+            whole configuration.
+          </p>
+        </li>
+
+        <li>
+          <h3><span class="wsg-num">3</span> Paste it into Settings</h3>
+          <p>
+            Open <em>Settings</em> in this hub, paste the key into
+            <em>Keenable API key</em>, and click <em>Save</em>.
+          </p>
+        </li>
+
+        <li>
+          <h3><span class="wsg-num">4</span> Test it</h3>
+          <p>
+            With Settings still open, click <strong>Test credentials</strong>. You
+            should see <em>“✓ Working — Keenable returned N result(s).”</em>
+          </p>
+          <p>
+            If it fails, the message names the exact cause and the fix — a rejected
+            key, exhausted credits, or a rate limit. Leave the key field empty and
+            press Test again to check the public tier on its own.
+          </p>
+        </li>
+
+        <li>
+          <h3><span class="wsg-num">5</span> Turn on the fallback</h3>
+          <p>
+            In the chat panel, tick <strong>Allow live-web fallback</strong>. The hub
+            will search the web only when its own knowledge base has no answer, and
+            it always labels web-derived answers as unverified with their sources.
+          </p>
+          <p>
+            Results from these domains are preferred, because they are the primary
+            sources for this subject:
+          </p>
+          <div class="wsg-domains" id="wsg-domains">cloud.google.com/*
 developers.google.com/*
+firebase.google.com/*
 ai.google.dev/*
 codelabs.developers.google.com/*
-firebase.google.com/*
+google.github.io/*
 github.com/*
-adk.dev/*</pre>
+adk.dev/*
+antler.co/*</div>
           <p class="wsg-hint">
-            Google removed the “search the entire web” option for new engines in
-            January 2026, and caps an engine at 50 domains. These seven are the
-            official documentation sources this hub trusts.
+            These are a preference, not a filter. If nothing on this list matches, the
+            search still returns its best results and the answer is labelled as coming
+            from outside the trusted set — better than showing you nothing.
           </p>
         </li>
-
-        <li>
-          <h3><span class="wsg-num">2</span> Turn on SafeSearch</h3>
-          <p>
-            In the same screen set <strong>SafeSearch &rarr; On</strong>. The hub
-            requests filtered results, so this keeps them consistent.
-          </p>
-        </li>
-
-        <li>
-          <h3><span class="wsg-num">3</span> Copy the Search engine ID</h3>
-          <p>
-            Complete the reCAPTCHA and click <strong>Create</strong>. On the next
-            screen find <strong>Search engine ID</strong> — a short string like
-            <code>a1b2c3d4e5f6g7h8i</code> — and copy it.
-          </p>
-          <p class="wsg-hint">
-            Ignore the code snippet Google offers for embedding a search box. This
-            hub queries the API directly; you do not need to paste anything into a
-            web page.
-          </p>
-        </li>
-
-        <li>
-          <h3><span class="wsg-num">4</span> Create an API key</h3>
-          <p>
-            Go to <strong>APIs &amp; Services &rarr; Credentials</strong> in your
-            Google Cloud project and click <strong>Create credentials &rarr; API key</strong>.
-          </p>
-          <ul>
-            <li>
-              If <strong>Custom Search API</strong> is not enabled yet, enable it
-              first under <strong>APIs &amp; Services &rarr; Library</strong>.
-            </li>
-            <li>
-              Under <strong>API restrictions</strong>, choose
-              <strong>Custom Search API</strong> — this makes the required
-              “API selection required” error go away.
-            </li>
-            <li>
-              Under <strong>Application restrictions</strong>, leave
-              <strong>None</strong>. The key is used from each visitor’s browser,
-              so a website restriction would break it for everyone else.
-            </li>
-          </ul>
-          <p>Copy the key — it starts with <code>AIza</code>.</p>
-        </li>
-
-        <li>
-          <h3><span class="wsg-num">5</span> Paste both values here</h3>
-          <p>
-            Close this guide and enter the two values in the
-            <strong>Live-web fallback</strong> section of the Keys dialog.
-          </p>
-          <p class="wsg-hint">
-            Tip: testing the pair in a browser tab is the fastest way to confirm it
-            works. Replace <code>KEY</code> and <code>CX</code> below and open the URL.
-          </p>
-          <pre class="wsg-domains">https://www.googleapis.com/customsearch/v1?key=KEY&amp;cx=CX&amp;q=test</pre>
-          <p class="wsg-hint">
-            A JSON response with an <code>items</code> array means both values are
-            good. <code>403</code> means the API is not enabled on that project;
-            <code>400</code> means the key or engine ID is wrong.
-          </p>
-        </li>
-
       </ol>
 
-      <div class="wsg-warning">
-        <strong>What leaves your browser.</strong>
-        Your search key goes only to <code>googleapis.com</code>. Your question is
-        truncated to 256 characters before it is sent to Google. To show you the
-        full content of a result page (the browser cannot read those sites
-        directly), the page address — not your key and not your question — is sent
-        to this hub to retrieve the public text. Nothing is stored on the server.
-      </div>
-
-      <div class="wsg-warning wsg-warning--legacy">
-        <strong>Heads-up on Google’s roadmap.</strong>
-        Google closed the Custom Search JSON API to new customers in January 2026
-        and will discontinue it on <strong>1 January 2027</strong>. This feature
-        will need a different search provider after that date.
+      <div class="wsg-privacy">
+        <h3>What leaves your browser</h3>
+        <p>
+          Only your question, truncated to 256 characters and collapsed to a single
+          line, is sent to <code>api.keenable.ai</code>. Your key goes to Keenable and
+          nowhere else — it is never sent to this site's origin and is never logged
+          server-side.
+        </p>
+        <p>
+          <strong>Forget search key</strong> in Settings erases it from this browser.
+        </p>
       </div>
 
     </div>
@@ -146,6 +122,5 @@ adk.dev/*</pre>
     <footer class="wsg-footer">
       <button class="wsg-btn wsg-btn--primary" id="wsg-done" type="button">Got it</button>
     </footer>
-
   </div>
 </div>

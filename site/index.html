@@ -70,9 +70,9 @@
   </style>
   <!-- Sprint 17: shared provider-adaptive generation config -->
   <script type="module">
-    import * as ProviderConfig from './assets/provider-config.js?v=57d956a1';
+    import * as ProviderConfig from './assets/provider-config.js?v=9f49cca3';
     window.ProviderConfig = ProviderConfig;
-    import * as WebSearch from './assets/provider-websearch.js?v=c25b4708';
+    import * as WebSearch from './assets/provider-websearch.js?v=1e8d9c56';
     window.WebSearch = WebSearch;
     import * as MdLite from './assets/markdown-lite.js?v=a696d783';
     window.MdLite = MdLite;
@@ -84,7 +84,7 @@
 </head>
 <body class="transition-colors duration-200">
 <script type="module">
-  import { ensureSettingsModal, populateCseFields } from './assets/settings-modal.js?v=969d2b16';
+  import { ensureSettingsModal, populateCseFields } from './assets/settings-modal.js?v=f46b83e9';
   ensureSettingsModal();
   // Bridge the module-scoped helper to the classic script that owns
   // openSettingsModal() — modules don't leak their bindings to inline handlers.
@@ -658,7 +658,7 @@ export GFS_HUB_URL="https://gfs-immersion.vwoosh.com"   # or your own deployment
 <input class="rounded border-border text-accent focus:ring-accent" id="chat-live-web" type="checkbox"/>
 <span>Allow live-web fallback</span>
 </label>
-<span class="text-[10px] text-text-muted">(sends a truncated query to Google Custom Search only when local KB abstains)</span>
+<span class="text-[10px] text-text-muted">(sends a truncated query to Keenable search only when the local KB abstains)</span>
 </div>
 <div class="flex items-center justify-between text-[10px] text-text-muted">
 <span class="">Security: Client-side retrieval • Server verification via /api/ground</span>
@@ -813,18 +813,54 @@ export GFS_HUB_URL="https://gfs-immersion.vwoosh.com"   # or your own deployment
       return /\/chat\/completions$/.test(n) ? n : n + '/chat/completions';
     }
 
+    /**
+     * Send one chat-completions request to the user's provider.
+     *
+     * Auth is provider-specific and the header cannot be inferred from the error:
+     * Azure AI Foundry rejects `Authorization: Bearer` and wants `api-key`, while
+     * an APIM subscription gateway wants `Ocp-Apim-Subscription-Key` — and Azure
+     * answers all of them with the same "invalid subscription key or wrong API
+     * endpoint" 401. So on an auth failure we walk the scheme ladder instead of
+     * guessing, and remember nothing about the failure except that auth was tried.
+     */
     function callProvider(cfg, body) {
-      return fetch(providerEndpoint(cfg.base), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer ' + cfg.key,
-          'HTTP-Referer': location.origin,
-          'X-Title': 'GFS Immersion Assistant'
-        },
-        body: JSON.stringify(body),
-        signal: cfg.signal
-      });
+      const PC = window.ProviderConfig;
+      const endpoint = providerEndpoint(cfg.base);
+      const order = (PC && PC.authSchemeOrder)
+        ? PC.authSchemeOrder(cfg.base, SAVED_AUTH_SCHEME())
+        : ['bearer'];
+      const send = (scheme) => {
+        const headers = (PC && PC.authHeaders)
+          ? PC.authHeaders(cfg.base, cfg.key, scheme)
+          : { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + cfg.key };
+        return fetch(endpoint, {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify(body),
+          signal: cfg.signal
+        });
+      };
+      return (async () => {
+        let res = await send(order[0]);
+        for (let i = 1; i < order.length && (res.status === 401 || res.status === 403); i += 1) {
+          const retry = await send(order[i]);
+          if (retry.ok) {
+            // Persist the scheme that worked so later calls skip the ladder.
+            try { localStorage.setItem('gfs_llm_auth_scheme', order[i]); } catch (e) {}
+            return retry;
+          }
+          res = retry;
+        }
+        if (res.ok) {
+          try { localStorage.setItem('gfs_llm_auth_scheme', order[0]); } catch (e) {}
+        }
+        return res;
+      })();
+    }
+
+    /** Remembered auth scheme, or 'auto' to infer from the host. */
+    function SAVED_AUTH_SCHEME() {
+      try { return localStorage.getItem('gfs_llm_auth_scheme') || 'auto'; } catch (e) { return 'auto'; }
     }
 
     function setKeyStatus(state) {
@@ -906,18 +942,15 @@ export GFS_HUB_URL="https://gfs-immersion.vwoosh.com"   # or your own deployment
       if (keyInput) localStorage.setItem(LLM_STORAGE.key, keyInput);
       localStorage.setItem(LLM_STORAGE.origin, location.origin);
 
-      // BYO Google Custom Search credentials (optional; browser-only).
+      // BYO Keenable search key (optional; browser-only).
       const cseKeyEl = document.getElementById('cse-key');
-      const cseCxEl = document.getElementById('cse-cx');
       const cseKey = cseKeyEl ? cseKeyEl.value.trim() : '';
-      const cseCx = cseCxEl ? cseCxEl.value.trim() : '';
-      if (cseKey || cseCx) {
-        if (cseKey && !/^AIza[0-9A-Za-z_\-]{10,}$/.test(cseKey)) {
-          showSettingsStatus('Google API key should start with "AIza". Saved anyway — check it if search fails.', 'danger');
+      if (cseKey) {
+        if (WebSearch && !WebSearch.looksLikeKeenableKey(cseKey)) {
+          showSettingsStatus('Keenable keys normally start with "keen_". Saved anyway — use Test credentials to check.', 'danger');
         }
-        if (WebSearch) WebSearch.saveSearchCredentials(cseKey, cseCx);
+        if (WebSearch) WebSearch.saveSearchCredentials(cseKey);
         if (cseKeyEl) cseKeyEl.value = '';
-        if (cseCxEl) cseCxEl.value = '';
       }
       refreshCseStatus();
 
@@ -939,26 +972,77 @@ export GFS_HUB_URL="https://gfs-immersion.vwoosh.com"   # or your own deployment
       closeSettingsModal();
     }
 
-    /** Reflect whether BYO search credentials are present. */
+    /** Reflect whether a BYO Keenable key is present. */
     function refreshCseStatus() {
       const el = document.getElementById('cse-status');
       if (!el) return;
       const ok = !!(WebSearch && WebSearch.isWebSearchConfigured());
-      el.textContent = ok ? 'configured' : 'not configured';
+      el.textContent = ok ? 'configured' : 'public tier';
       el.className = 'text-[10px] px-1.5 py-0.5 rounded-sm font-mono '
         + (ok ? 'bg-success/15 text-success' : 'bg-accent-tint text-accent');
       const toggleLabel = document.getElementById('chat-live-web-label');
       if (toggleLabel) toggleLabel.title = ok
-        ? 'When enabled, the hub can search official web sources with YOUR Google key if the local KB has no answer.'
-        : 'Add your own Google Custom Search credentials in Settings to enable this.';
+        ? 'When enabled, the hub can search the live web with YOUR Keenable key if the local KB has no answer.'
+        : 'Live search uses the shared Keenable public tier. Add your own key in Settings for higher limits.';
     }
 
     function forgetSearchCreds() {
       if (WebSearch) WebSearch.clearSearchCredentials();
-      const k = document.getElementById('cse-key'); const c = document.getElementById('cse-cx');
-      if (k) k.value = ''; if (c) c.value = '';
+      const k = document.getElementById('cse-key');
+      if (k) k.value = '';
       refreshCseStatus();
-      showSettingsStatus('Search credentials removed from this browser.', 'success');
+      showSettingsStatus('Search key removed from this browser — live search falls back to the public tier.', 'success');
+    }
+
+    /**
+     * Run one real query against Keenable and report exactly what it said.
+     *
+     * Uses the saved key when the field is empty (the saved key is never echoed
+     * back into the input), and falls back to the keyless public tier so the
+     * button is useful before any key exists.
+     */
+    async function testSearchCreds() {
+      const out = document.getElementById('cse-test-result');
+      const keyEl = document.getElementById('cse-key');
+      const saved = (WebSearch && WebSearch.getSearchCredentials) ? WebSearch.getSearchCredentials() : null;
+      const key = (keyEl && keyEl.value.trim()) || (saved && saved.key) || '';
+      const keyless = !key;
+      const setOut = (msg, tone) => {
+        if (!out) return;
+        out.textContent = msg;
+        out.className = 'text-[11px] pt-1 ' + (tone === 'ok' ? 'text-success' : tone === 'wait' ? 'text-text-muted' : 'text-warning');
+      };
+      setOut(keyless ? 'Testing the public tier (no key set)…' : 'Testing…', 'wait');
+      let res;
+      try {
+        res = await WebSearch.searchWeb('agent development kit', keyless ? null : { key: key },
+          { num: 3, keyless: keyless });
+      } catch (e) {
+        setOut('✗ Test failed to run: ' + (e && e.message ? e.message : 'unknown error'), 'warn');
+        return;
+      }
+      const explain = {
+        bad_key: 'Keenable rejected the API key. Check it starts with “keen_” and is active in the console.',
+        no_credentials: 'Add an API key, or leave the field empty to use the public tier.',
+        no_credits: 'This key is out of credits. Add credits in the Keenable console — do not retry.',
+        key_rejected: 'The key was rejected or revoked. Create a new one in the Keenable console.',
+        throttled_local: 'Wait a second — the Test button runs one search at a time. Try again.',
+        throttled: 'Keenable rate limit reached. Wait a moment, then retry.',
+        missing_app_title: 'The keyless request needs an app identifier — a site bug, not your key.',
+        bad_request: 'Keenable rejected the request parameters.',
+        unusable_page: 'Keenable could not extract content for that query.',
+        network_error: 'Could not reach Keenable (network or ad-blocker).',
+        provider_error: 'Keenable had a server error. Retry in a moment.'
+      }[res.reason] || ('Search failed (' + res.reason + ').');
+      if (res.ok) {
+        const n = res.snippets ? res.snippets.length : 0;
+        setOut('✓ Working — Keenable returned ' + n + ' result(s)'
+          + (keyless ? ' on the public tier. Save a key for higher limits.' : '.')
+          + (res.confidence === 'off_list' ? ' (none on the trusted-domain list — shown with a caution label)' : ''), 'ok');
+        refreshCseStatus();
+      } else {
+        setOut('✗ ' + explain + (res.detail ? ' Keenable said: “' + res.detail + '”' : ''), 'warn');
+      }
     }
 
     function openSettingsModal() {
@@ -1244,32 +1328,46 @@ export GFS_HUB_URL="https://gfs-immersion.vwoosh.com"   # or your own deployment
         // Mirrors the server rule: (not answerable or live_web is True).
         const cseCreds = (window.WebSearch && window.WebSearch.getSearchCredentials()) || null;
         const webEnabled = (window.WebSearch && window.WebSearch.isWebSearchEnabled()) || false;
-        const canSearchWeb = !!cseCreds && webEnabled;
+        // Keenable answers keyless on a shared public tier, so a key is an upgrade
+        // rather than a prerequisite. Requiring one was what made this path look
+        // dead for anyone who had not configured Google credentials.
+        const keylessSearch = !cseCreds;
+        const canSearchWeb = !!window.WebSearch && webEnabled;
         if (!localAnswerable || liveWebRequested) {
           if (canSearchWeb) {
             loadingBubble.remove();
             const webBubble = assistantBubble(
-              '<div class="flex items-center gap-1 text-[11px] text-accent font-medium animate-pulse"><span>🌐</span><span>Searching the web with your Google key…</span></div>'
+              '<div class="flex items-center gap-1 text-[11px] text-accent font-medium animate-pulse"><span>🌐</span><span>'
+                + (keylessSearch ? 'Searching the web…' : 'Searching the web with your Keenable key…')
+                + '</span></div>'
             );
             messagesContainer.appendChild(webBubble);
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
 
-            const webRes = await window.WebSearch.searchWeb(query, cseCreds, { num: 3 });
+            const webRes = await window.WebSearch.searchWeb(
+              query,
+              cseCreds,
+              { num: 3, keyless: keylessSearch }
+            );
             webBubble.remove();
 
             if (!webRes.ok) {
               const why = {
-                quota_exhausted: 'Your Google Custom Search daily quota (100/day) is exhausted.',
-                bad_credentials: 'Google rejected your API key or search engine ID.',
-                api_not_enabled: 'The "Custom Search API" is not enabled for your Google Cloud project (enable it, then retry).',
-                key_restricted: 'Your Google API key is restricted and may not allow this site or the Custom Search API.',
-                no_credentials: 'Add your Google search credentials in Settings.',
-                throttled: 'Slow down a moment — search calls are rate-limited.',
-                no_allowed_results: 'No results from trusted domains were found.',
-                network_error: 'Could not reach Google Custom Search.'
+                bad_key: 'Keenable rejected your API key. Check that it starts with “keen_” and is active in the console.',
+                no_credentials: 'Add a Keenable key in Settings, or leave it empty to use the public tier.',
+                no_credits: 'Your Keenable key is out of credits. Add credits in the console — retrying will not help.',
+                key_rejected: 'Your Keenable key was rejected or revoked. Create a new one in the Keenable console.',
+                throttled_local: 'Wait a second between searches, then try again.',
+                throttled: 'Keenable rate limit reached — wait a few seconds and try again.',
+                missing_app_title: 'The keyless request is missing its app identifier — a site bug, not something you can fix.',
+                bad_request: 'Keenable rejected the request parameters.',
+                unusable_page: 'Keenable could not extract readable content for that query.',
+                no_results: 'The search returned no usable results for that question.',
+                network_error: 'Could not reach Keenable (network or ad-blocker).',
+                provider_error: 'Keenable had a server error. Try again in a moment.'
               }[webRes.reason] || ('Live-web search failed (' + webRes.reason + ').');
               const whyDetail = webRes.detail
-                ? ' Google said: “' + escapeHtml(webRes.detail) + '”.'
+                ? ' Keenable said: “' + escapeHtml(webRes.detail) + '”.'
                 : '';
               // Sprint 21h: if the hub already has a usable answer, a failed OPTIONAL
               // web pass must not throw it away. Report the failure and fall through.
@@ -1331,9 +1429,51 @@ export GFS_HUB_URL="https://gfs-immersion.vwoosh.com"   # or your own deployment
                 ]
               });
               const webResp = await callProvider({ base: base, key: key, signal: controller.signal }, webBody);
+
+              // This path used to call .json() unconditionally and coalesce a missing
+              // message to '', which rendered "No answer generated." for EVERY provider
+              // failure — a rejected model id, a 401, a rate limit — with no way to tell
+              // them apart. Validate exactly as the KB path does, and surface the cause.
+              if (!webResp.ok) {
+                let detail = '';
+                try {
+                  const errBody = await webResp.json();
+                  const e = errBody && errBody.error;
+                  detail = (e && (e.message || e.code)) || '';
+                  if (!detail && e && typeof e === 'string') detail = e;
+                  if (!detail && errBody && errBody.message) detail = errBody.message;
+                } catch (e) { /* non-JSON error body */ }
+                const hint = webResp.status === 401 ? 'Your provider API key was rejected — check it in Settings.'
+                  : webResp.status === 402 ? 'The provider reports insufficient credit for this key.'
+                  : webResp.status === 429 ? 'Rate limited by the provider — wait a moment and retry.'
+                  : webResp.status === 404 ? 'The provider does not recognise this model id: ' + model
+                  : webResp.status === 400 ? 'The provider rejected the request shape or the model id: ' + model
+                  : 'The provider rejected the request.';
+                throw new Error(hint + (detail ? ' — ' + String(detail).slice(0, 300)
+                                                : ' (HTTP ' + webResp.status + ')'));
+              }
+
+              const webCt = webResp.headers.get('content-type') || '';
+              if (!webCt.includes('application/json')) {
+                throw new Error('The provider returned a non-JSON response — check the base URL (' + base + ').');
+              }
+
               const webJson = await webResp.json();
-              const webAnswer = (webJson && webJson.choices && webJson.choices[0]
-                && webJson.choices[0].message && webJson.choices[0].message.content) || '';
+              // Some providers answer 200 with an empty/reasoning-only message.
+              const webChoice = webJson && webJson.choices && webJson.choices[0];
+              const webMsg = webChoice && webChoice.message;
+              let webAnswer = String((webMsg && (webMsg.content || webMsg.reasoning_content)) || '').trim();
+              if (!webAnswer && webChoice && webChoice.finish_reason === 'length') {
+                // Hit maxTokens before emitting anything: usually too much prompt, too
+                // little budget. Say so rather than blaming the model.
+                throw new Error('The provider ran out of output budget before answering. '
+                  + 'Try a shorter question, or raise the token limit for this model.');
+              }
+              if (!webAnswer) {
+                const fm = (webChoice && webChoice.finish_reason) || 'none';
+                throw new Error('The provider returned an empty message for model "' + model
+                  + '" (finish_reason: ' + fm + '). Check the model id and that it accepts a system prompt.');
+              }
               const srcList = webSnippets.map(function (s, i) {
                 return '[' + (i + 1) + '] ' + s.title + ' — ' + s.link;
               }).join('\n');
@@ -1371,9 +1511,17 @@ export GFS_HUB_URL="https://gfs-immersion.vwoosh.com"   # or your own deployment
                 }
               } catch (e) { /* grounding unavailable: stays `uncited`, which is honest */ }
 
-              appendAssistant('<p class="font-medium text-success">🌐 Live web answer (from your Google search)</p>'
+              // When nothing matched the trusted-domain list, the results are still
+              // real and often the only answer available. Say so plainly instead of
+              // dropping them — the old hard filter produced a dead end here.
+              const offListNote = (webRes.confidence === 'off_list')
+                ? '<p class="text-[11px] text-warning mt-1">⚠ None of these came from the usual trusted documentation domains — treat with more caution and verify at the source.</p>'
+                : '';
+              appendAssistant('<p class="font-medium text-success">🌐 Live web answer'
+                + (keylessSearch ? ' (public search tier)' : ' (from your Keenable key)') + '</p>'
                 + '<div class="text-[13px] md-body">' + webMd + '</div>'
                 + '<p class="text-[11px] mt-1 font-semibold">' + webBadge + '</p>'
+                + offListNote
                 + '<p class="text-[11px] text-text-muted mt-2">Sources:\n' + escapeHtml(srcList) + '</p>'
                 + (bodyCount
                   ? '<p class="text-[10px] text-text-muted mt-1">Read full text from ' + bodyCount + ' of ' + webSnippets.length + ' pages.</p>'
@@ -1397,8 +1545,8 @@ export GFS_HUB_URL="https://gfs-immersion.vwoosh.com"   # or your own deployment
             appendAssistant('<p class="font-medium text-warning">🔍 No grounded material found</p>'
               + '<p class="text-[12px] text-text-secondary">There is not enough verified knowledge in this hub to answer that reliably. Try asking about ADK, SequentialAgent, Cloud Run, Antigravity, or VC math.</p>'
               + (canSearchWeb
-                ? '<p class="text-[12px] text-text-secondary">Tip: tick <strong>Allow live-web fallback</strong> to search official sources with your own Google key.</p>'
-                : '<p class="text-[12px] text-text-secondary">Tip: add your own Google Custom Search credentials in Settings to enable live-web answers.</p>'));
+                ? '<p class="text-[12px] text-text-secondary">Tip: tick <strong>Allow live-web fallback</strong> to search the live web for this question.</p>'
+                : '<p class="text-[12px] text-text-secondary">Tip: enable <strong>Allow live-web fallback</strong> in the chat panel to search the live web.</p>'));
             return;
           }
 
@@ -1406,7 +1554,7 @@ export GFS_HUB_URL="https://gfs-immersion.vwoosh.com"   # or your own deployment
           // instead of doing nothing silently, then fall through to the local answer.
           if (liveWebRequested && !canSearchWeb) {
             appendAssistant('<p class="font-medium text-warning">🌐 Live-web fallback not available</p>'
-              + '<p class="text-[12px] text-text-secondary">No Google Custom Search credentials are saved in this browser, so the web search could not run. Add your own API key and search-engine ID in Settings to enable it.</p>'
+              + '<p class="text-[12px] text-text-secondary">Live-web search is switched off for this session. Tick <strong>Allow live-web fallback</strong> in the chat panel to search the live web (a Keenable key is optional — the public tier works without one).</p>'
               + '<button onclick="openSettingsModal()" class="text-accent text-[12px] font-bold hover:underline">Open Settings →</button>');
           }
         }

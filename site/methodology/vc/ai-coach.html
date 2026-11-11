@@ -227,13 +227,13 @@
 </script>
 <!-- Sprint 17: shared provider-adaptive generation config -->
 <script type="module">
-  import * as ProviderConfig from '../../assets/provider-config.js?v=57d956a1';
+  import * as ProviderConfig from '../../assets/provider-config.js?v=9f49cca3';
   window.ProviderConfig = ProviderConfig;
-  import * as WebSearch from '../../assets/provider-websearch.js?v=c25b4708';
+  import * as WebSearch from '../../assets/provider-websearch.js?v=1e8d9c56';
   window.WebSearch = WebSearch;
   import '../../assets/provider-websearch-guide.js?v=7eab1089';
   // Sprint 22: the ONE shared credentials UI. This page no longer carries its own.
-  import * as SettingsModal from '../../assets/settings-modal.js?v=969d2b16';
+  import * as SettingsModal from '../../assets/settings-modal.js?v=f46b83e9';
   window.SettingsModal = SettingsModal;
   SettingsModal.installGlobals();
   SettingsModal.ensureSettingsModal();
@@ -710,16 +710,13 @@
     localStorage.setItem(LLM_STORAGE.override, cfg.override ? 'true' : 'false');
     localStorage.setItem(LLM_STORAGE.origin, location.origin);
 
-    // BYO Google Custom Search credentials (same storage namespace as the portal).
+    // BYO Keenable search key (same storage namespace as the portal).
     const cseKeyEl = document.getElementById('cse-key');
-    const cseCxEl = document.getElementById('cse-cx');
-    if (cseKeyEl || cseCxEl) {
-      const k = cseKeyEl ? cseKeyEl.value.trim() : '';
-      const c = cseCxEl ? cseCxEl.value.trim() : '';
-      if (k || c) {
-        if (window.WebSearch) window.WebSearch.saveSearchCredentials(k, c);
-        if (cseKeyEl) cseKeyEl.value = '';
-        if (cseCxEl) cseCxEl.value = '';
+    if (cseKeyEl) {
+      const k = cseKeyEl.value.trim();
+      if (k) {
+        if (window.WebSearch) window.WebSearch.saveSearchCredentials(k);
+        cseKeyEl.value = '';
       }
       refreshCseStatus();
     }
@@ -730,14 +727,14 @@
     const el = document.getElementById('cse-status');
     if (!el) return;
     const ok = !!(window.WebSearch && window.WebSearch.isWebSearchConfigured());
-    el.textContent = ok ? 'configured' : 'not configured';
+    el.textContent = ok ? 'configured' : 'public tier';
     el.style.color = ok ? '#137333' : '';
   }
 
   function forgetSearchCreds() {
     if (window.WebSearch) window.WebSearch.clearSearchCredentials();
-    const k = document.getElementById('cse-key'); const c = document.getElementById('cse-cx');
-    if (k) k.value = ''; if (c) c.value = '';
+    const k = document.getElementById('cse-key');
+    if (k) k.value = '';
     refreshCseStatus();
   }
   function hasKey() { return !!loadCfg().key; }

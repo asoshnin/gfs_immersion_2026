@@ -107,6 +107,77 @@ export function providerEndpoint(base, overrides) {
   return /\/chat\/completions$/.test(n) ? n : n + '/chat/completions';
 }
 
+/**
+ * Azure-hosted endpoints do not accept `Authorization: Bearer`.
+ *
+ * Azure AI Foundry / Azure OpenAI authenticate with an `api-key` header. Sending
+ * `Authorization: Bearer <key>` instead yields Azure's famously unhelpful
+ * "Access denied due to invalid subscription key or wrong API endpoint." — which
+ * reads as a bad key even when the key is perfectly valid. That message sent a
+ * real user hunting for a new key when the only problem was the header name.
+ */
+const AZURE_HOST_RE = /\.(services\.ai\.azure\.com|openai\.azure\.com|cognitiveservices\.azure\.com|azure-api\.net|azure\.com)$/i;
+
+export function isAzureEndpoint(baseUrl) {
+  try {
+    return AZURE_HOST_RE.test(new URL(String(baseUrl || '')).hostname);
+  } catch (e) {
+    return false;
+  }
+}
+
+/**
+ * Every auth scheme a provider gateway realistically expects.
+ *
+ * `api-key`          Azure AI Foundry / Azure OpenAI (documented)
+ * `bearer`           OpenAI, OpenRouter, most OpenAI-compatible servers
+ * `ocp-apim`         Azure API Management subscriptions (an APIM gateway answers
+ *                    with `apim-request-id`, and APIM wants Ocp-Apim-Subscription-Key)
+ *
+ * Azure's 401 body is identical for a wrong header and a wrong key ("invalid
+ * subscription key or wrong API endpoint"), so the header cannot be inferred from
+ * the error. Probing in priority order is the only deterministic way to find it.
+ */
+export const AUTH_SCHEMES = ['api-key', 'bearer', 'ocp-apim'];
+
+export function defaultAuthScheme(baseUrl) {
+  return isAzureEndpoint(baseUrl) ? 'api-key' : 'bearer';
+}
+
+/** Order schemes are attempted, given the user's preference (or 'auto'). */
+export function authSchemeOrder(baseUrl, preferred) {
+  const want = String(preferred || 'auto').toLowerCase();
+  if (want !== 'auto' && AUTH_SCHEMES.includes(want)) {
+    return [want, ...AUTH_SCHEMES.filter((x) => x !== want)];
+  }
+  const first = defaultAuthScheme(baseUrl);
+  return [first, ...AUTH_SCHEMES.filter((x) => x !== first)];
+}
+
+/**
+ * Build request headers for a provider call.
+ *
+ * @param {string} baseUrl
+ * @param {string} key
+ * @param {string} [scheme] 'auto' | 'api-key' | 'bearer' | 'ocp-apim'
+ */
+export function authHeaders(baseUrl, key, scheme) {
+  const use = (!scheme || scheme === 'auto') ? defaultAuthScheme(baseUrl) : scheme;
+  const headers = {
+    'Content-Type': 'application/json',
+    'HTTP-Referer': (typeof location !== 'undefined' ? location.origin : ''),
+    'X-Title': 'GFS Immersion Assistant'
+  };
+  if (use === 'api-key') {
+    headers['api-key'] = key;
+  } else if (use === 'ocp-apim') {
+    headers['Ocp-Apim-Subscription-Key'] = key;
+  } else {
+    headers['Authorization'] = 'Bearer ' + key;
+  }
+  return headers;
+}
+
 export function getModelCapability(model, baseUrl) {
   const m = String(model || '').toLowerCase();
   const base = String(baseUrl || '').toLowerCase();
@@ -238,19 +309,27 @@ export function applyErrorRecovery(errorText, currentParams, status) {
 
 export async function callProviderWithRecovery(cfg, body) {
   const endpoint = providerEndpoint(cfg.base, cfg.override);
-  const makeRequest = (payload) => ({
+  const makeRequest = (payload, scheme) => ({
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer ' + cfg.key,
-      'HTTP-Referer': (typeof location !== 'undefined' ? location.origin : ''),
-      'X-Title': 'GFS Immersion Assistant'
-    },
+    headers: authHeaders(cfg.base, cfg.key, scheme),
     body: JSON.stringify(payload),
     signal: cfg.signal
   });
 
-  let res = await fetch(endpoint, makeRequest(body));
+  // Walk the auth-scheme order on an auth failure. A 401/403 means the request
+  // never reached the model, so retrying cannot double-bill tokens.
+  const order = authSchemeOrder(cfg.base, cfg.authScheme);
+  let res = await fetch(endpoint, makeRequest(body, order[0]));
+  for (let i = 1; i < order.length && (res.status === 401 || res.status === 403); i += 1) {
+    const retry = await fetch(endpoint, makeRequest(body, order[i]));
+    if (retry.ok) {
+      retry._authSchemeUsed = order[i];
+      res = retry;
+      break;
+    }
+    res = retry;
+  }
+  if (res.ok && !res._authSchemeUsed && order.length) res._authSchemeUsed = order[0];
   if (!res.ok) {
     const errorText = await res.text();
     const recovered = applyErrorRecovery(errorText, body, res.status);
