@@ -96,21 +96,27 @@ _SERVICE_STATE = {
 _PREFLIGHT_DONE = False
 
 # ── Retrieval-core import shim (Sprint 09, design §4.3) ──────────────
-# serve.py is published from 02_public_hub/, while the retrieval core
-# (crawl.retrieve / crawl.freshness) lives in the private harvester tree.
-# The deployable unit is intentionally non-self-sufficient — the SQLite index
-# is staged from the private data/ tree too. We therefore add two explicit,
-# documented import roots:
-#   1. <repo>/01_harvester_pipeline  (local development layout)
+# serve.py ships inside the public hub, while the retrieval core
+# (crawl.retrieve / crawl.freshness) is vendored alongside it. When serve.py is
+# run from a larger development checkout, the core can also live in an optional
+# sibling directory. We therefore add two explicit, documented import roots:
+#   1. an optional sibling core checkout (set GFS_DEV_CORE), if configured
 #   2. <HUB_DIR>                     (container layout: /app with /app/crawl)
 # This is a deliberate boundary shim, not dynamic/recursive path discovery.
 _REPO_ROOT = os.path.dirname(HUB_DIR)
-for _import_root in (os.path.join(_REPO_ROOT, "01_harvester_pipeline"), HUB_DIR):
+# Optional, explicit override for a larger checkout: GFS_DEV_CORE=/path/to/core
+_import_roots = [p for p in (os.environ.get("GFS_DEV_CORE"), HUB_DIR) if p]
+for _import_root in _import_roots:
     if _import_root not in sys.path:
         sys.path.insert(0, _import_root)
 
 from crawl import retrieve as retrieval  # noqa: E402
 from crawl.freshness import query_requires_freshness  # noqa: E402
+from crawl.relevance import (  # noqa: E402
+    classify_relevance,
+    redirect_message,
+)
+from crawl.relevance import suggested_questions as relevance_suggested_questions  # noqa: E402
 
 MAX_SEARCH_TOP_K = retrieval.MAX_TOP_K
 MAX_SEARCH_QUERY_LEN = retrieval.MAX_QUERY_LEN
@@ -121,6 +127,12 @@ _EMBEDDER = None
 _EMBEDDER_UNAVAILABLE = False
 _EMBEDDER_LOCK = threading.Lock()
 
+# Sprint 18: lazy CPU reranker. Imported inside the getter so a missing
+# optional dependency never breaks server import.
+_RERANKER = None
+_RERANKER_UNAVAILABLE = False
+_RERANKER_LOCK = threading.Lock()
+
 # ── Rate Limiting ──────────────────────────────────────────────────
 # SEC2-05: bounded LRU + TTL structure. Entries are pruned by age and the
 # map is capped, so spoofed/rotating identities cannot grow process memory
@@ -130,6 +142,42 @@ MAX_CHAT_PER_IP_PER_HOUR = 20
 CHAT_RATE_WINDOW_SECONDS = 3600
 CHAT_RATE_LIMIT_MAX_ENTRIES = 4096
 _rate_limit_lock = threading.Lock()
+
+# ── Sprint 17: Web-ground fallback constants and budget state ────────
+# Triggered only when both Google CSE env vars are present at runtime.
+WEB_GROUND_ENABLED = bool(
+    os.environ.get("GFS_SEARCH_API_KEY") and os.environ.get("GFS_SEARCH_ENGINE_ID")
+)
+
+# Page fetching is INDEPENDENT of the server holding a search key.
+#
+# The search itself happens in the visitor's browser with their own Google key
+# (BYO mode), so the server needs no credentials at all. But the browser cannot
+# read third-party pages directly (no CORS), so /api/fetch exists to return page
+# text. It never receives a credential — only a URL from a fixed allowlist, which
+# is SSRF-guarded — so there is no reason to gate it behind a server-side key.
+#
+# Without this, a BYO-only deployment would let users search but give them only
+# 200-character teasers instead of the real page content.
+PAGE_FETCH_ENABLED = bool(os.environ.get("GFS_PAGE_FETCH_DISABLED") != "1")
+
+# When the server DOES hold a search key it provides its own web-ground tier.
+# Keeping the flag exposed lets callers report which mode is active.
+WEB_GROUND_SERVER_KEY_PRESENT = WEB_GROUND_ENABLED
+WEB_GROUND_DOMAIN_ALLOWLIST = list(retrieval.WEB_GROUND_DEFAULT_ALLOWLIST)
+WEB_GROUND_MAX_DAILY_CALLS = 80
+WEB_GROUND_MAX_PER_IP_HOUR = 5
+WEB_GROUND_MAX_RESULTS = 3
+WEB_GROUND_MAX_BYTES_PER_PAGE = 50 * 1024
+WEB_GROUND_FETCH_TIMEOUT_SECONDS = 10
+
+# Per-IP rolling window for web-ground calls. Same TTL/LRU structure as
+# CHAT_RATE_LIMIT so spoofed identities cannot grow memory without bound.
+WEB_GROUND_IP_LIMIT: "OrderedDict[str, list[float]]" = OrderedDict()
+WEB_GROUND_LIMIT_MAX_ENTRIES = 4096
+_web_ground_rate_lock = threading.Lock()
+_web_ground_daily_calls = 0
+_web_ground_daily_lock = threading.Lock()
 
 # ── Concurrency ────────────────────────────────────────────────────
 MAX_CONCURRENT_CHATS = 2
@@ -274,6 +322,52 @@ def _check_and_record_chat(client_ip: str, now: float) -> bool:
         return True
 
 
+def _check_and_record_web_ground(client_ip: str, now: float) -> bool:
+    """TTL + LRU bounded web-ground rate limiter (V-15).
+
+    Returns False when the caller is over the per-IP hourly budget or when the
+    shared daily cap has been reached.
+    """
+    global _web_ground_daily_calls
+
+    with _web_ground_rate_lock:
+        stale = [
+            ip
+            for ip, stamps in WEB_GROUND_IP_LIMIT.items()
+            if not stamps or now - stamps[-1] >= CHAT_RATE_WINDOW_SECONDS
+        ]
+        for ip in stale:
+            WEB_GROUND_IP_LIMIT.pop(ip, None)
+
+        if client_ip not in WEB_GROUND_IP_LIMIT:
+            while len(WEB_GROUND_IP_LIMIT) >= WEB_GROUND_LIMIT_MAX_ENTRIES:
+                WEB_GROUND_IP_LIMIT.popitem(last=False)
+
+        window = [
+            stamp
+            for stamp in WEB_GROUND_IP_LIMIT.get(client_ip, [])
+            if now - stamp < CHAT_RATE_WINDOW_SECONDS
+        ]
+        if len(window) >= WEB_GROUND_MAX_PER_IP_HOUR:
+            return False
+
+        with _web_ground_daily_lock:
+            if _web_ground_daily_calls >= WEB_GROUND_MAX_DAILY_CALLS:
+                return False
+            _web_ground_daily_calls += 1
+
+        window.append(now)
+        WEB_GROUND_IP_LIMIT[client_ip] = window
+        WEB_GROUND_IP_LIMIT.move_to_end(client_ip)
+        return True
+
+
+def _truncate_for_cse(query: str, max_len: int = 256) -> str:
+    """Cap the egressed query to a single line of at most ``max_len`` chars (V-16)."""
+    single = re.sub(r"[\r\n]+", " ", query).strip()
+    return single[:max_len]
+
+
 def _get_embedder():
     """Lazily construct the BGE query embedder on the first dense search.
 
@@ -300,6 +394,37 @@ def _get_embedder():
                 "Embedding model unavailable; serving lexical_only: %s", exc
             )
         return _EMBEDDER
+
+
+def _get_reranker():
+    """Lazily construct the CPU reranker on first use.
+
+    Returns ``None`` when the model is missing, oversized, or cannot be
+    loaded. The retrieval path then behaves exactly as it did before Sprint
+    18 and honestly reports ``reranker_used: false``.
+    """
+    global _RERANKER, _RERANKER_UNAVAILABLE
+
+    if _RERANKER is not None or _RERANKER_UNAVAILABLE:
+        return _RERANKER
+
+    with _RERANKER_LOCK:
+        if _RERANKER is not None or _RERANKER_UNAVAILABLE:
+            return _RERANKER
+        try:
+            from crawl.rerank import CPUReranker
+
+            _RERANKER = CPUReranker()
+            if _RERANKER.unavailable:
+                _RERANKER = None
+                _RERANKER_UNAVAILABLE = True
+                logger.info("Reranker unavailable; hybrid path unchanged")
+            else:
+                logger.info("Lazy-loaded CPU reranker on first search")
+        except Exception as exc:
+            _RERANKER_UNAVAILABLE = True
+            logger.warning("Reranker load failed; serving without reranking: %s", exc)
+        return _RERANKER
 
 
 def _open_search_connection() -> sqlite3.Connection:
@@ -426,15 +551,18 @@ def search_hybrid(query: str, top_k: int = 10, corpus=None, scope=None) -> dict:
 
     conn = _open_search_connection()
     try:
+        reranker = _get_reranker()
         if scope is not None:
             # Sprint 13: routed path (design §8) — identical return tuple to
             # the hardened path, so the payload below needs no special case.
             citations, mode, answerability = retrieval.search_routed(
-                conn, query, scope=scope, top_k=top_k, embedder=_get_embedder()
+                conn, query, scope=scope, top_k=top_k, embedder=_get_embedder(),
+                reranker=reranker,
             )
         else:
             citations, mode, answerability = retrieval.hybrid_search_ranked(
-                conn, query, top_k=top_k, embedder=_get_embedder(), corpus=corpus
+                conn, query, top_k=top_k, embedder=_get_embedder(), corpus=corpus,
+                reranker=reranker,
             )
         results = [_citation_to_result(conn, citation) for citation in citations]
     finally:
@@ -453,6 +581,8 @@ def search_hybrid(query: str, top_k: int = 10, corpus=None, scope=None) -> dict:
     payload["abstention_reason"] = answerability.reason
     payload["total"] = len(results)
     payload["results"] = results
+    payload["reranker_used"] = bool(answerability.reranker_used)
+    payload["reranked_count"] = int(answerability.reranked_count)
     return payload
 
 
@@ -467,7 +597,525 @@ def _session_catalog() -> dict:
     return {s["id"]: s for s in load_catalog().get("sessions", [])}
 
 
-def _session_public_url(session_id: str | None, sessions: dict) -> str | None:
+def _looks_like_session_fact_query(message: str) -> bool:
+    """True when the question asks for structured session metadata.
+
+    Identity/listing questions (who presented, which sessions, when, what
+    organisation) cannot be answered by embedding similarity: the catalog holds
+    them as exact structured fields, and a paraphrased question sits far from
+    any chunk in vector space (measured dense distance ~0.85, well past the
+    0.55 answerability gate). They must be answered from the catalog.
+    """
+    m = (message or "").lower()
+    asks_meta = any(
+        w in m for w in ("session 01", "session 02", "session 03", "session 04",
+                         "session 1", "session 2", "session 3", "session 4",
+                         "all sessions", "each session", "sessions 01", "01 to 04",
+                         "01-04", "grouped by session", "the cohort", "the speakers")
+    )
+    # Sprint 21b: "who is" alone is a trap. It matched "who is the CEO of
+    # Microsoft" and "who is the president of France" and answered them from the
+    # session catalog -- a confident answer to a question this hub cannot serve.
+    # The question is only answerable from the catalog when it is scoped to the
+    # cohort: either it explicitly asks about a presenter/speaker, or it names a
+    # session AND asks a person question.
+    asks_person_about_cohort = any(
+        w in m for w in ("presenter", "speaker", "who presented", "who spoke")
+    )
+    asks_bare_person = any(w in m for w in ("who is", "who were", "names"))
+    return asks_person_about_cohort or (asks_bare_person and asks_meta) or (
+        asks_meta and any(w in m for w in ("title", "date", "topic", "cover"))
+    )
+
+
+#: Words that mean "give me the abstract of this session" rather than "find me
+#: text inside it". These are deliberately separate from the metadata words
+#: because they are answered from the catalog summary + highlights, not from the
+#: structured fields and not from vector search.
+_SESSION_SUMMARY_INTENT = (
+    "takeaway", "takeaways", "take away", "take aways",
+    "summary", "summarise", "summarize", "summarised", "summarized",
+    "recap", "recaps", "tl;dr", "tldr",
+    "lesson", "lessons", "key point", "key points",
+    "main point", "main points", "main idea", "main ideas",
+    "overview", "in a nutshell", "highlights", "key highlights",
+    "what did they cover", "what does it cover", "what was covered",
+    "bottom line", "so what",
+)
+
+
+# Sprint 21d: a QUESTION CAN NAME A RANGE ("session 1-3", "sessions 2 to 4").
+# The old matcher only did substring tests for single sessions, which produced two
+# opposite bugs on the same input shape:
+#   "session 1-3"  -> matched the substring "session 1" -> returned ONLY session 01,
+#                     silently dropping 02 and 03. The model then said 02/03 "were
+#                     not retrieved" -- a false gap report caused by the parser.
+#   "sessions 1-3" -> the plural defeated every variant -> matched nothing ->
+#                     silently fell back to ALL sessions, including 04.
+# Both are the same root cause: no range parsing.
+_SESSION_RANGE_RE = re.compile(
+    r"sessions?\s+0?(\d)\s*(?:-|\u2010|\u2011|\u2012|\u2013|\u2014|to\b|through\b|thru\b)\s*0?(\d)",
+    re.I,
+)
+_SESSION_LIST_RE = re.compile(
+    r"sessions?\s+((?:0?\d)(?:\s*(?:,|and)\s*0?\d)+)",
+    re.I,
+)
+
+
+def _session_ids_in_ranges(m: str) -> list:
+    """Session ids named by an explicit range or comma list, in catalog order."""
+    ids: list = []
+
+    for lo_s, hi_s in _SESSION_RANGE_RE.findall(m):
+        lo, hi = int(lo_s), int(hi_s)
+        if lo > hi:
+            lo, hi = hi, lo
+        for n in range(lo, hi + 1):
+            ids.append(f"session_{n:02d}")
+
+    for run in _SESSION_LIST_RE.findall(m):
+        for n in re.findall(r"\d+", run):
+            ids.append(f"session_{int(n):02d}")
+
+    catalog = set(_session_catalog())
+    seen: list = []
+    for sid in ids:
+        if sid in catalog and sid not in seen:
+            seen.append(sid)
+    return sorted(seen)
+
+
+def _session_ids_mentioned(m: str) -> list:
+    """Session ids named in ``m``, in catalog order.
+
+    Handles ``session 04``, ``session 4``, ``session04``, the bare-number forms,
+    and explicit ranges/lists (``session 1-3``, ``sessions 2 to 4``,
+    ``sessions 1, 2 and 3``). Returns ``[]`` when the question is about sessions
+    in general.
+    """
+    found = _session_ids_in_ranges(m)
+    for sid in sorted(_session_catalog()):
+        num = sid.rsplit("_", 1)[-1].lstrip("0") or "0"
+        variants = (sid.replace("_", " "), f"session {num}", f"session{num}",
+                    f"session 0{num}", sid)
+        if any(v in m for v in variants) and sid not in found:
+            found.append(sid)
+    return found
+
+
+# Sprint 23: "each of the four sessions", "all 4 sessions", "per session", "takeaways
+# for the sessions" all range over the whole programme, but the old hard-coded
+# phrases ("each session", "the sessions") missed the intervening words, so
+# "takeaways for each of the four sessions" skipped the catalog-summary path and
+# fell through to similarity search -- returning product-doc excerpts and an
+# abstention, while "takeaway for session 03" worked. This pattern requires the
+# PLURAL "sessions" so a single named session is unaffected.
+_MULTI_SESSION_PLURAL_RE = re.compile(
+    r"\b(?:each|every|all|both|per|across)\b[^.?!]{0,30}\bsessions\b"
+    r"|\b(?:the|these|those|all|both)\s+(?:four|4|\d+)\s+sessions\b"
+    r"|\bper\s+sessions?\b"
+    r"|\bfor\s+the\s+sessions\b",
+    re.I,
+)
+
+
+def _asks_about_multiple_sessions(m: str) -> bool:
+    """True when the question ranges over several sessions (word-order tolerant)."""
+    return bool(_MULTI_SESSION_PLURAL_RE.search(m or ""))
+
+
+def _asks_about_all_sessions(m: str) -> bool:
+    """True when the question ranges over the whole programme, not one session."""
+    return any(
+        w in m for w in ("all sessions", "all these sessions", "all the sessions",
+                         "each session", "every session", "across sessions",
+                         "across all", "the sessions", "these sessions",
+                         "the whole programme", "the whole program", "all four",
+                         "both sessions", "sessions overall")
+    ) or _asks_about_multiple_sessions(m)
+
+
+def _is_session_summary_query(message: str) -> bool:
+    """True when the question asks for a session's SUMMARY rather than details.
+
+    Sprint 21b: "what is the takeaway from session 04?" abstained with
+    ``dense_distance_above_threshold`` at 0.8508 against a 0.84 gate, even though
+    the answer is the catalog summary the UI already shows on the card. The
+    catalog holds that text as an authored field, so embedding similarity is the
+    wrong tool: the question is abstractive, and the abstract is already written.
+
+    This is NOT a relaxation of the answerability gate. It only decides whether
+    to answer from an authored summary instead of from retrieved chunks.
+    """
+    m = (message or "").lower()
+    if not any(w in m for w in _SESSION_SUMMARY_INTENT):
+        return False
+    # Either a named session, or an explicit "the sessions" plural.
+    if _session_ids_mentioned(m):
+        return True
+    return any(
+        w in m for w in ("the sessions", "all sessions", "each session",
+                         "the cohort", "across sessions", "these sessions")
+    ) or _asks_about_multiple_sessions(m)
+
+
+# Sprint 21f: how much of a session's own content a "takeaways" answer gets.
+# Fixed rules, not per-question tuning: the sessions are small enough to hand the
+# model their opening synthesis/executive-summary chunks.
+SESSION_DIGEST_CHUNKS = 2        # per session, programme-wide question
+SESSION_DIGEST_CHUNKS_SINGLE = 3 # per session, when exactly one session is named
+
+
+def _session_content_excerpts(sid: str, limit: int = SESSION_DIGEST_CHUNKS) -> list:
+    """The session's OWN authored chunks, in authored order (Sprint 21f).
+
+    The catalog card is ~250 characters. The sessions are thousands:
+    session_04 holds 15,138 characters across 21 chunks, session_02 24,881 across
+    33. A "what is the takeaway from each session" question was answered from the
+    card alone, which is exactly why the answers read as dry -- the real content
+    was already indexed and simply never selected.
+
+    Selection is a fixed rule: the first ``limit`` chunks of the session, in
+    chunk order. ``chunk_001`` is the authored "Session N Synthesis" and
+    ``chunk_002`` the executive summary, so this is the session's own opening
+    thesis, not a query-dependent pick.
+    """
+    if not os.path.exists(GFS_DB_PATH):
+        return []
+    s = _session_catalog().get(sid, {})
+    url = s.get("on_demand_url") or f"/api/page?type=source&name={sid}"
+    rows = []
+    try:
+        conn = sqlite3.connect(GFS_DB_PATH)
+        try:
+            conn.row_factory = sqlite3.Row
+            rows = conn.execute(
+                """
+                SELECT chunk_id, title, content
+                FROM immersion_chunks
+                WHERE session_id = ?
+                ORDER BY chunk_id
+                LIMIT ?
+                """,
+                (sid, int(limit)),
+            ).fetchall()
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return []
+    out: list = []
+    for row in rows:
+        body = (row["content"] or "").strip()
+        if not body:
+            continue
+        out.append(
+            {
+                # The stored chunk id IS the citable key, so the user can verify
+                # this text against the session page exactly.
+                "fusion_key": f"session:{row['chunk_id']}",
+                "title": f"{sid.replace('_', ' ').title()}: {row['title'] or ''}".strip(),
+                "url": url,
+                "snippet": body,
+            }
+        )
+    return out
+
+
+def _session_summary_excerpts(m: str, limit: int = 2) -> list:
+    """Citable excerpts built from the catalog summary + highlights.
+
+    One excerpt per requested session. The text is authored cohort knowledge
+    that the portal already renders on the session card, so citing it is honest:
+    the user can verify the identical text on the page.
+    """
+    sessions = _session_catalog()
+    named = _session_ids_mentioned(m)
+    wanted = named or sorted(sessions)
+    # Sprint 21c: when the question is about ALL sessions, "limit" must not
+    # truncate the answer. It previously defaulted to 2, so "takeaway from all
+    # these sessions" cited only Sessions 01-02 and the model then told the user
+    # the KB had no content for 03/04 -- a false gap report about our own corpus.
+    if not named and _asks_about_all_sessions(m):
+        limit = max(limit, len(wanted))
+    excerpts: list = []
+    for sid in wanted:
+        s = sessions.get(sid)
+        if not s:
+            continue
+        summary = (s.get("summary") or "").strip()
+        highlights = [h for h in (s.get("highlights") or []) if h]
+        if not summary and not highlights:
+            continue
+        body_parts = [f"{sid.replace('_', ' ').title()} — {s.get('title', '')}"]
+        if s.get("date"):
+            body_parts.append(f"Date: {s['date']}")
+        if s.get("speakers"):
+            body_parts.append("Speakers: " + ", ".join(s["speakers"]))
+        if summary:
+            body_parts.append("")
+            body_parts.append("Summary: " + summary)
+        if highlights:
+            body_parts.append("")
+            body_parts.append("Key highlights:")
+            body_parts.extend(f"- {h}" for h in highlights)
+        url = s.get("on_demand_url") or f"/api/page?type=source&name={sid}"
+        excerpts.append(
+            {
+                "fusion_key": f"session:{sid}::summary",
+                "title": f"{sid.replace('_', ' ').title()}: {s.get('title', '')} (summary)",
+                "url": url,
+                "snippet": "\n".join(body_parts),
+            }
+        )
+        # Sprint 21f: the card is the header, the session's own chunks are the
+        # substance. Without this the model reasons over ~250 chars per session
+        # while thousands sit unused in the index.
+        per = SESSION_DIGEST_CHUNKS_SINGLE if len(wanted) == 1 else SESSION_DIGEST_CHUNKS
+        excerpts.extend(_session_content_excerpts(sid, limit=per))
+    return excerpts
+
+
+def _anchor_excerpts(message: str, limit: int = 2) -> list:
+    """Exact-name fallback against ``framework_anchors``.
+
+    Sprint 21b: the table holds the framework names the cohort actually uses
+    ("Five Lenses", "Defensibility Hierarchy", "Sean Ellis 40%") mapped to the
+    chunk that defines them, but NOTHING queried it. So "explain the ladder of
+    proof" abstained on dense distance (0.8899) while "explain the Five Lenses"
+    passed -- an arbitrary difference in phrasing, not in coverage.
+
+    This runs only when the dense gate would ABSTAIN, and only on an exact
+    anchor-token match, so it cannot manufacture answers for questions the index
+    genuinely cannot serve: a nonsense string matches no anchor and still
+    abstains. It is a lookup, not a relaxation of the gate.
+    """
+    if not os.path.exists(GFS_DB_PATH):
+        return []
+    m = (message or "").lower()
+    tokens = set(re.findall(r"[a-z0-9]+", m))
+    if not tokens:
+        return []
+    try:
+        conn = sqlite3.connect(GFS_DB_PATH)
+        rows = conn.execute(
+            "SELECT anchor, chunk_id, source_url, provenance_origin "
+            "FROM framework_anchors"
+        ).fetchall()
+    except Exception:
+        logger.warning("anchor lookup unavailable", exc_info=True)
+        return []
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+    hits = []
+    for anchor, chunk_id, source_url, origin in rows:
+        a_core = _anchor_core_tokens(anchor)
+        if not a_core:
+            continue
+        # Sprint 21g: match on the DISTINCTIVE words. The earlier rule required
+        # every token of "Five Lenses" to appear, so "explain the lenses from the
+        # 4th session" missed the anchor outright because the user omitted "five"
+        # -- and fell through to plain similarity search, which surfaced Lens 1
+        # and Lens 4 only.
+        if a_core.issubset(tokens):
+            hits.append((len(a_core), anchor, chunk_id, source_url, origin))
+    hits.sort(reverse=True)
+
+    excerpts = []
+    for _n, anchor, chunk_id, source_url, origin in hits[:limit]:
+        # Sprint 21g: an anchor names a FRAMEWORK, and a framework has member
+        # sections. Returning only the anchor chunk handed the model the title
+        # plus one member, so "explain the lenses" described two lenses and
+        # reported the other three as missing -- while all five lens chunks sat
+        # in the index. Expand to the anchor's whole section (bounded).
+        excerpts.extend(
+            _anchor_section_excerpts(chunk_id, anchor, source_url, origin)
+        )
+    return excerpts
+
+
+# Sprint 21g: quantifier/ordinal words carry no identity, so they are ignored
+# when deciding whether a question names a framework. "Five Lenses" is matched
+# by "lenses"; "Sean Ellis 40%" by "sean ellis".
+_ANCHOR_QUANTIFIERS = frozenset(
+    "one two three four five six seven eight nine ten first second third fourth "
+    "fifth sixth seventh eighth ninth tenth".split()
+)
+
+# Cap on how many sibling chunks one anchor may contribute. A framework section
+# is a handful of members; this stops a malformed document from flooding the
+# prompt.
+ANCHOR_SECTION_MAX_CHUNKS = 8
+
+# Cap on the merged excerpt list when a framework anchor is combined with the
+# similarity results, so a framework section can never flood the prompt.
+ANCHOR_MERGE_MAX_EXCERPTS = 10
+
+
+def _anchor_core_tokens(text: str) -> set:
+    """Anchor tokens that carry identity: no digits, no quantifier words."""
+    return {
+        t
+        for t in re.findall(r"[a-z0-9%]+", (text or "").lower())
+        if t not in _ANCHOR_QUANTIFIERS and not t.isdigit()
+    }
+
+
+def _anchor_section_excerpts(
+    anchor_chunk_id: str,
+    anchor: str,
+    source_url,
+    origin,
+    max_chunks: int = ANCHOR_SECTION_MAX_CHUNKS,
+) -> list:
+    """The anchor's defining section: the anchor chunk plus its siblings.
+
+    Siblings are taken in chunk order from the same source document and stop at
+    the next top-level numbered section (a title matching ``^N.``). That is a
+    structural rule read from the authored document, not a per-question pick, so
+    it generalises to any framework whose members are sub-items of its section.
+    """
+    if not anchor_chunk_id or not os.path.exists(GFS_DB_PATH):
+        return []
+    try:
+        conn = sqlite3.connect(GFS_DB_PATH)
+        conn.row_factory = sqlite3.Row
+    except sqlite3.Error:
+        return []
+    try:
+        head = conn.execute(
+            "SELECT source_file FROM immersion_chunks WHERE chunk_id = ?",
+            (anchor_chunk_id,),
+        ).fetchone()
+        if head is None:
+            # A doc anchor: no section structure to expand, keep prior behaviour.
+            body = _anchor_chunk_text(anchor_chunk_id)
+            return [
+                {
+                    "fusion_key": f"anchor:{anchor_chunk_id}",
+                    "title": f"{anchor} (framework anchor)",
+                    "url": source_url
+                    or f"/api/page?type=source&name={anchor_chunk_id}",
+                    "snippet": body or f"{anchor} — defined in the cohort sessions.",
+                    "provenance_origin": origin,
+                }
+            ]
+        siblings = conn.execute(
+            "SELECT chunk_id, title, content FROM immersion_chunks "
+            "WHERE source_file = ? ORDER BY chunk_id",
+            (head["source_file"],),
+        ).fetchall()
+    except sqlite3.Error:
+        return []
+    finally:
+        conn.close()
+
+    out: list = []
+    started = False
+    for row in siblings:
+        if not started:
+            if row["chunk_id"] != anchor_chunk_id:
+                continue
+            started = True
+        title = (row["title"] or "").strip()
+        # A new top-level numbered section ends the anchor's section.
+        if out and re.match(r"^\s*\d+\.", title):
+            break
+        body = (row["content"] or "").strip()
+        if not body:
+            continue
+        base = row["chunk_id"].split("::", 1)[0].replace("_anchors", "")
+        session = _session_catalog().get(base, {})
+        url = (
+            session.get("on_demand_url")
+            or source_url
+            or f"/api/page?type=source&name={base}"
+        )
+        out.append(
+            {
+                "fusion_key": f"anchor:{row['chunk_id']}",
+                "title": f"{anchor}: {title}".strip(),
+                "url": url,
+                "snippet": body,
+                "provenance_origin": origin,
+            }
+        )
+        if len(out) >= max_chunks:
+            break
+    return out
+
+
+def _anchor_chunk_text(chunk_id: str) -> str:
+    """Best-effort text for an anchor chunk (session chunk or doc chunk)."""
+    if not chunk_id:
+        return ""
+    try:
+        conn = sqlite3.connect(GFS_DB_PATH)
+    except Exception:
+        return ""
+    try:
+        row = conn.execute(
+            "SELECT content FROM immersion_chunks WHERE chunk_id = ?", (chunk_id,)
+        ).fetchone()
+        if row:
+            return str(row[0])[:1700]
+        key = chunk_id.split("#", 1)[0]
+        suffix = chunk_id.split("#", 1)[1] if "#" in chunk_id else None
+        row = conn.execute(
+            "SELECT content FROM doc_chunks WHERE doc_id = ? LIMIT 1", (key,)
+        ).fetchone()
+        if row:
+            return str(row[0])[:1700]
+    except Exception:
+        return ""
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+    return ""
+
+
+def _session_fact_excerpts(limit: int = 4) -> list:
+    """Build citable excerpts straight from the session catalog.
+
+    This is the deterministic path for metadata questions: one excerpt per
+    session, containing the authoritative speakers/organisation/date/title. It
+    bypasses embedding search entirely, so a correctly-worded question cannot
+    abstain merely because its vector happens to be far from the chunk text.
+    """
+    sessions = _session_catalog()
+    excerpts: list = []
+    for sid in sorted(sessions):
+        s = sessions[sid]
+        url = s.get("on_demand_url") or f"/api/page?type=source&name={sid}"
+        speakers = s.get("speakers") or []
+        speak_txt = ", ".join(speakers) if speakers else "not recorded"
+        org = s.get("org") or ""
+        date = s.get("date") or ""
+        body = (
+            f"{sid.replace('_', ' ').title()} — {s.get('title', '')}\n"
+            f"Speakers: {speak_txt}" + (f" ({org})" if org else "") + "\n"
+            f"Date: {date}"
+        )
+        excerpts.append(
+            {
+                "fusion_key": f"session:{sid}::catalog",
+                "title": f"{sid.replace('_', ' ').title()}: {s.get('title', '')}",
+                "url": url,
+                "snippet": body,
+            }
+        )
+        if len(excerpts) >= limit:
+            break
+    return excerpts
+
+
+
     """Resolve a public URL for a session chunk.
 
     Session chunks have ``source_url = NULL`` because they are authored
@@ -475,10 +1123,21 @@ def _session_public_url(session_id: str | None, sessions: dict) -> str | None:
     otherwise point at the portal's own session page, which always resolves.
     FR-3 requires a resolvable URL per citation, so this never returns a
     non-URL placeholder.
+
+    Derived session ids (``session_04_anchors``) are anchors extracted from the
+    parent session and must resolve to the PARENT's URL. Without this they had no
+    catalog entry, returned ``None``, and every anchor chunk — including the
+    canonical Five Lenses text — was silently dropped from the evidence window.
     """
     if not session_id:
         return None
     session = sessions.get(session_id)
+    if session is None and "_" in session_id:
+        # Fall back to the parent session (session_04_anchors -> session_04).
+        parent = session_id.rsplit("_", 1)[0]
+        session = sessions.get(parent)
+        if session is not None:
+            session_id = parent
     if session and session.get("on_demand_url"):
         return session["on_demand_url"]
     if session:
@@ -510,6 +1169,33 @@ def _result_url(row: dict, sessions: dict) -> str | None:
     return row.get("canonical_url") or row.get("source_url")
 
 
+def _session_public_url(session_id: str | None, sessions: dict) -> str | None:
+    """Resolve a public URL for a session chunk.
+
+    Session chunks have ``source_url = NULL`` because they are authored
+    markdown, not crawled pages. Prefer the catalog's on-demand recording URL;
+    otherwise point at the portal's own session page, which always resolves.
+
+    Derived session ids (``session_04_anchors``) are anchors extracted from the
+    parent session and must resolve to the PARENT's URL. Without that fallback
+    they had no catalog entry, returned ``None``, and every anchor chunk —
+    including the canonical Five Lenses text — was silently dropped.
+    """
+    if not session_id:
+        return None
+    session = sessions.get(session_id)
+    if session is None and "_" in session_id:
+        parent = session_id.rsplit("_", 1)[0]
+        session = sessions.get(parent)
+        if session is not None:
+            session_id = parent
+    if session and session.get("on_demand_url"):
+        return session["on_demand_url"]
+    if session:
+        return f"/api/page?type=source&name={session_id}"
+    return None
+
+
 def _excerpt_snippet(row: dict) -> str:
     """The text the client puts in front of the model for this citation."""
     if row["result_type"] == "session":
@@ -521,19 +1207,30 @@ def _excerpts_from_results(results: list) -> list:
     """Build the evidence window ``[{fusion_key, title, url, snippet}]``.
 
     Sprint 11 / FR-1: this list *is* the chat answer now — the server no longer
-    generates. One excerpt per distinct URL, in ranking order, so the numbered
-    marker the model is told to use (``[1]``, ``[2]``, ...) means exactly the
-    same thing in ``excerpts`` as in ``sources``. Rows without a resolvable URL
-    are dropped: they could never be validated as a citation.
+    generates.
+
+    One excerpt per distinct CHUNK, in ranking order. It used to be one excerpt
+    per distinct URL, which silently destroyed the evidence window: every chunk
+    of a single session shares one recording URL, so a five-lens document
+    collapsed to a single (often irrelevant) chunk and the model was asked to
+    answer from one paragraph. Citations may legitimately repeat a URL — the
+    ``[n]`` marker indexes excerpts, and ``sources`` still dedupes by page.
+
+    Rows without a resolvable URL are dropped: they could never be validated as
+    a citation.
     """
     sessions = _session_catalog()
     excerpts: list = []
-    seen_urls: set = set()
+    seen_keys: set = set()
     for row in results:
         url = _result_url(row, sessions)
-        if not url or url in seen_urls:
+        if not url:
             continue
-        seen_urls.add(url)
+        # Dedupe by chunk identity, not by URL.
+        identity = row.get("fusion_key") or id(row)
+        if identity in seen_keys:
+            continue
+        seen_keys.add(identity)
         excerpts.append(
             {
                 "fusion_key": row.get("fusion_key"),
@@ -543,6 +1240,38 @@ def _excerpts_from_results(results: list) -> list:
             }
         )
     return excerpts
+
+
+def _describe_excerpt_coverage(excerpts: list) -> str:
+    """One line telling the model exactly which sessions/documents it was given.
+
+    A scoped retrieval result is not a statement about the corpus. Making the
+    scope explicit is what stops the model from reporting non-existent gaps.
+    """
+    sessions: list = []
+    docs = 0
+    for e in excerpts or []:
+        key = str(e.get("fusion_key") or "")
+        if key.startswith("session:"):
+            sid = key.split(":", 1)[1].split("::", 1)[0]
+            if sid and sid not in sessions:
+                sessions.append(sid)
+        elif key.startswith("doc:"):
+            docs += 1
+    parts = []
+    if sessions:
+        pretty = ", ".join(sorted(s.replace("_", " ").title() for s in sessions))
+        parts.append(f"{len(sessions)} session excerpt(s): {pretty}")
+    if docs:
+        parts.append(f"{docs} document excerpt(s)")
+    if not parts:
+        return "Scope: no excerpts were provided for this question.\n"
+    return (
+        "Scope of this answer: " + "; ".join(parts) + ". "
+        "These excerpts are the complete set provided for this specific question. "
+        "A topic's absence here does not mean the hub lacks it — it was not "
+        "requested or retrieved for this query.\n"
+    )
 
 
 def build_chat_prompt(excerpts: list) -> str:
@@ -559,13 +1288,24 @@ def build_chat_prompt(excerpts: list) -> str:
             f'url="{excerpt.get("url") or ""}">\n'
             f'**{excerpt.get("title")}**\n{excerpt.get("snippet")}\n</excerpt>\n\n'
         )
+
+    # Sprint 21c: tell the model what the excerpt set IS. Without this it treated a
+    # deliberately-scoped result as the whole knowledge base and reported gaps that
+    # did not exist ("the KB only contains summaries for Sessions 01 and 02") when
+    # the caller had simply asked about one session or been handed a limit.
+    coverage = _describe_excerpt_coverage(excerpts)
     return build_system_prompt() + (
         f"\n\n{rag_context}"
+        f"\n{coverage}"
         "\nGround every claim in the excerpts above. Cite each claim with "
         "the excerpt's fusion_key in square brackets (e.g. "
         "[doc:655f3836#0000]) or its excerpt number (e.g. [1]). Never "
-        "invent a citation or a URL. If the excerpts do not support an "
-        "answer, say so instead of guessing."
+        "invent a citation or a URL.\n"
+        "If the excerpts above do not answer the question, say only that this "
+        "particular question is not covered by the excerpts provided — do NOT "
+        "claim that the hub lacks the material, and do NOT list sessions or "
+        "topics as missing. You cannot see the rest of the knowledge base, so a "
+        "gap you infer from these excerpts is not evidence of a gap in the corpus."
     )
 
 
@@ -787,15 +1527,21 @@ SYSTEM_PROMPT_TEMPLATE, PROMPT_VERSION = _load_system_prompt()
 # treated as fabricated; the sentence carrying it is dropped.
 FUSION_MARKER_RE = re.compile(r"\[((?:doc|session):[^\s\[\]]+)\]")
 ORDINAL_MARKER_RE = re.compile(r"\[(\d{1,3})\]")
-URL_RE = re.compile(r"https?://[^\s<>\"')\]]+")
+URL_RE = re.compile(r"https?://[^\s<>\"')\]]+", re.IGNORECASE)
 
 
 def _normalize_url(url: str) -> str:
-    """Compare citations on a stable shape: no scheme, no trailing slash."""
+    """Compare citations on a stable shape: no scheme, no trailing slash, no punctuation.
+
+    Sprint 21: ``URL_RE`` greedily captures whatever follows the URL, so a valid link at a
+    clause boundary arrives as ``https://host/path,`` or ``https://host/path).`` and would
+    be marked fabricated. Trailing sentence punctuation is stripped symmetrically with the
+    capture so a legitimate end-of-sentence URL is not punished.
+    """
     value = (url or "").strip().lower()
     value = re.sub(r"^https?://", "", value)
     value = value.split("#", 1)[0].split("?", 1)[0]
-    return value.rstrip("/")
+    return value.rstrip("/").rstrip(".,;:!?")
 
 
 def _sentence_spans(text: str) -> list:
@@ -831,18 +1577,48 @@ def _bind_trailing_markers(text: str) -> str:
     )
 
 
+def _is_stub_sentence(text: str) -> bool:
+    """Return True if the sentence is a stub with no substantive claim.
+
+    A stub is a very short remainder carrying no substantive claim, such as
+    "Sure!", "OK.", "Here you go.", "Thanks!", or similar acknowledgements.
+    Used to distinguish rejected from partial when only stub content survives.
+    """
+    # A stub carries no CONTENT word: every token is an acknowledgement or a
+    # function word. Word-count alone is wrong here -- "Firestore is fast." is three
+    # words but it is a real claim, and treating it as a stub would push a legitimate
+    # partial answer down to rejected.
+    cleaned = re.sub(r"[^\w\s]", "", text or "").strip().lower()
+    if not cleaned:
+        return True
+    tokens = cleaned.split()
+    if not tokens:
+        return True
+    filler = {
+        # acknowledgements
+        "sure", "ok", "okay", "yes", "no", "yep", "nope", "thanks", "thank",
+        "great", "right", "correct", "indeed", "absolutely", "noted",
+        # function words that carry no claim on their own
+        "here", "you", "go", "got", "it", "that", "this", "is", "are", "was",
+        "were", "be", "been", "a", "an", "the", "and", "or", "but", "so", "of",
+        "to", "for", "in", "on", "at", "as", "we", "i", "will", "can", "now",
+    }
+    return all(tok in filler for tok in tokens)
+
+
 def validate_grounding(answer_text: str, retrieved_citations: list) -> dict:
-    """Strip fabricated citations from a generated answer (FR-3).
+    """Strip fabricated citations from a generated answer (FR-3 + Sprint 21).
 
     ``retrieved_citations`` is the ``sources`` list built for this response:
     ``[{"title", "url", "fusion_key"}, ...]``, in citation-ordinal order.
 
-    Returns ``{"answer", "ok", "checked", "dropped", "restored", ...}``.
-    ``ok`` is False when the surviving answer carries no supported citation, in
-    which case ``answer`` is the abstention text.
+    Returns ``{"answer", "ok", "checked", "dropped", "valid_markers",
+    "fabricated", "degraded", "reason", "verification", "kept_sentences"}``.
 
-    Pure function: no DB, no network, no model. That is the point — it is the
-    unit under test in ``tests/test_citation_validation.py``.
+    ``verification`` is one of: "cited" | "uncited" | "partial" | "rejected".
+    ``ok`` is True only when ``verification == "cited"``.
+
+    Pure function: no DB, no network, no model.
     """
     retrieved = list(retrieved_citations or [])
     allowed_keys = {
@@ -859,6 +1635,8 @@ def validate_grounding(answer_text: str, retrieved_citations: list) -> dict:
     fabricated: list = []
     valid_markers = 0
     kept_sentences = 0
+    kept_with_valid_marker = 0  # Non-stub sentences kept that had valid markers
+    kept_non_stub = 0  # Non-stub sentences kept (regardless of markers)
 
     out_lines = []
     for line in text.splitlines():
@@ -872,7 +1650,8 @@ def validate_grounding(answer_text: str, retrieved_citations: list) -> dict:
             keys = FUSION_MARKER_RE.findall(sentence)
             ordinals = ORDINAL_MARKER_RE.findall(sentence)
             urls = URL_RE.findall(sentence)
-            checked += len(keys) + len(ordinals)
+            # URLs now count toward checked (Sprint 21)
+            checked += len(keys) + len(ordinals) + len(urls)
 
             bad = [k for k in keys if k not in allowed_keys]
             bad += [f"[{n}]" for n in ordinals if not 1 <= int(n) <= ordinal_count]
@@ -882,10 +1661,16 @@ def validate_grounding(answer_text: str, retrieved_citations: list) -> dict:
                 dropped_sentences += 1
                 fabricated.extend(bad)
                 continue
+            has_valid = bool(keys or ordinals or urls)
             if keys or ordinals:
                 valid_markers += len(keys) + len(ordinals)
-            if sentence.strip():
+            stripped = sentence.strip()
+            if stripped:
                 kept_sentences += 1
+                if not _is_stub_sentence(sentence):
+                    kept_non_stub += 1
+                    if has_valid:
+                        kept_with_valid_marker += 1
             kept_parts.append(sentence)
 
         joined = " ".join(part.strip() for part in kept_parts).strip()
@@ -900,32 +1685,77 @@ def validate_grounding(answer_text: str, retrieved_citations: list) -> dict:
 
     cleaned = re.sub(r"\n{3,}", "\n\n", "\n".join(out_lines)).strip()
 
-    # Degrade to abstention when nothing supported survives.
-    if valid_markers == 0:
+    # Sprint 21 verification tier decision table
+    #
+    # | Condition | verification | answer returned |
+    # | fabricated == [] and (valid_markers > 0 or checked > 0) -> cited | cleaned
+    # | fabricated == [] and valid_markers == 0 and checked == 0 -> uncited | ORIGINAL
+    # | fabricated != [] and non-empty and has substance -> partial | cleaned
+    # | cleaned empty or only stubs -> rejected | ABSTENTION_MESSAGE
+
+    has_substance = kept_non_stub > 0 or kept_with_valid_marker > 0
+
+    if not fabricated and (valid_markers > 0 or checked > 0):
+        # All citations valid (or URL-only with validated URL)
+        verification = "cited"
         return {
-            "answer": ABSTENTION_MESSAGE,
+            "answer": cleaned,
+            "ok": True,
+            "checked": checked,
+            "dropped": dropped_sentences,
+            "valid_markers": valid_markers,
+            "fabricated": fabricated,
+            "degraded": False,
+            "reason": "grounded",
+            "verification": verification,
+            "kept_sentences": kept_sentences,
+        }
+
+    if not fabricated and valid_markers == 0 and checked == 0 and cleaned:
+        # No citations at all - return original text unchanged (not cleaned)
+        verification = "uncited"
+        return {
+            "answer": answer_text or "",  # ORIGINAL, not cleaned
             "ok": False,
             "checked": checked,
             "dropped": dropped_sentences,
             "valid_markers": 0,
             "fabricated": fabricated,
-            "degraded": True,
-            "reason": (
-                "all_citations_fabricated"
-                if dropped_sentences and checked
-                else "no_citation_markers"
-            ),
+            "degraded": False,  # Not degraded - advisory only
+            "reason": "no_citation_markers",
+            "verification": verification,
+            "kept_sentences": kept_sentences,
         }
 
+    # Some fabrications occurred
+    if cleaned and has_substance:
+        # Partial - some valid claims survive
+        verification = "partial"
+        return {
+            "answer": cleaned,
+            "ok": False,
+            "checked": checked,
+            "dropped": dropped_sentences,
+            "valid_markers": valid_markers,
+            "fabricated": fabricated,
+            "degraded": False,
+            "reason": "some_citations_fabricated",
+            "verification": verification,
+            "kept_sentences": kept_sentences,
+        }
+
+    # Rejected - only stubs survive or nothing at all
+    verification = "rejected"
     return {
-        "answer": cleaned,
-        "ok": True,
+        "answer": ABSTENTION_MESSAGE,
+        "ok": False,
         "checked": checked,
         "dropped": dropped_sentences,
         "valid_markers": valid_markers,
         "fabricated": fabricated,
-        "degraded": False,
-        "reason": "grounded" if not dropped_sentences else "partial",
+        "degraded": True,
+        "reason": "all_citations_fabricated",
+        "verification": verification,
         "kept_sentences": kept_sentences,
     }
 
@@ -945,6 +1775,8 @@ def grounding_report(verdict: dict) -> dict:
         "fabricated": verdict.get("fabricated", []),
         "degraded": bool(verdict.get("degraded")),
         "reason": verdict.get("reason"),
+        # Sprint 21: the verification tier is part of the published summary shape.
+        "verification": verdict.get("verification"),
     }
 
 
@@ -963,6 +1795,166 @@ def get_page_content(page_type: str, name: str) -> dict | None:
             if r["id"] == name:
                 return {"type": "registry", **r}
     return None
+
+def _chunk_spans(rows) -> tuple:
+    """Join chunk texts with a blank line and record each chunk's [start,end)."""
+    parts, spans, pos = [], {}, 0
+    for cid, text in rows:
+        text = text or ""
+        spans[cid] = (pos, pos + len(text))
+        parts.append(text)
+        pos += len(text) + 2  # the "\n\n" join separator
+    return "\n\n".join(parts), spans
+
+
+# Sprint 26: internal filesystem layout never ships to a reader. The indexed corpus
+# carries provenance headers naming the authoring checkout ("Locus: dev/DEMOS/...").
+# Excerpts are redacted on the way out, preserving the cited span.
+_INTERNAL_MARKER_RE = re.compile(
+    r"(?:[\w./-]*_DEVELOPMENT[\w./-]*"
+    r"|[\w./-]*01_harvester_pipeline[\w./-]*"
+    r"|dev/DEMOS/[\w./-]*"
+    r"|/home/[\w.-]+/[\w./-]*)"
+)
+
+
+def redact_internal_paths(text: str, start: int, end: int) -> tuple:
+    """Replace internal path tokens with a neutral marker, keeping ``[start,end)`` valid."""
+    if not text:
+        return text, start, end
+    parts: list = []
+    last = 0
+    shift = 0
+    for m in _INTERNAL_MARKER_RE.finditer(text):
+        token = m.group(0).rstrip(".)")
+        if not token:
+            continue
+        stop = m.start() + len(token)
+        parts.append(text[last:m.start()])
+        parts.append("[internal]")
+        if stop <= start:
+            shift += len("[internal]") - (stop - m.start())
+        last = stop
+    parts.append(text[last:])
+    return "".join(parts), max(0, start + shift), max(0, end + shift)
+
+
+def get_excerpt(key: str) -> dict | None:
+    """Reconstruct the indexed text behind a citation key (Sprint 24).
+
+    The chat cites chunks by fusion key (``session:session_04::chunk_003``,
+    ``doc:<doc_id>#0000``). This returns the full indexed document text plus the
+    character span of the cited chunk so the UI can render the original with the
+    chunk highlighted. The text is exactly what the index holds -- verifiable
+    against the corpus -- not a re-fetch of the live page.
+    """
+    key = (key or "").strip()
+    if not key or not os.path.exists(GFS_DB_PATH):
+        return None
+    catalog = _session_catalog()
+    try:
+        conn = sqlite3.connect(GFS_DB_PATH)
+        try:
+            conn.row_factory = sqlite3.Row
+
+            if key.startswith("session:"):
+                sid, _, tail = key[len("session:"):].partition("::")
+                sess = catalog.get(sid)
+                if not sess:
+                    return None
+                url = sess.get("on_demand_url") or f"/api/page?type=source&name={sid}"
+                if not tail or tail == "summary":
+                    parts = [f"{sid.replace('_', ' ').title()} — {sess.get('title', '')}"]
+                    if sess.get("summary"):
+                        parts += ["", "Summary: " + sess["summary"]]
+                    hl = [h for h in (sess.get("highlights") or []) if h]
+                    if hl:
+                        parts += ["", "Key highlights:"] + ["- " + h for h in hl]
+                    text = "\n".join(parts)
+                    return {
+                        "kind": "session_summary",
+                        "title": f"{sid.replace('_', ' ').title()}: {sess.get('title', '')}",
+                        "url": url,
+                        "doc_text": text,
+                        "start": 0,
+                        "end": len(text),
+                        "chunk_id": None,
+                        "session_id": sid,
+                    }
+                chunk_id = f"{sid}::{tail}"
+                row = conn.execute(
+                    "SELECT title FROM immersion_chunks WHERE chunk_id = ?",
+                    (chunk_id,),
+                ).fetchone()
+                if row is None:
+                    return None
+                rows = [
+                    (r["chunk_id"], r["content"])
+                    for r in conn.execute(
+                        "SELECT chunk_id, content FROM immersion_chunks "
+                        "WHERE session_id = ? ORDER BY chunk_id",
+                        (sid,),
+                    ).fetchall()
+                ]
+                doc_text, spans = _chunk_spans(rows)
+                start, end = spans.get(chunk_id, (0, 0))
+                return {
+                    "kind": "session",
+                    "title": f"{sid.replace('_', ' ').title()}: {row['title'] or ''}",
+                    "url": url,
+                    "doc_text": doc_text,
+                    "start": start,
+                    "end": end,
+                    "chunk_id": chunk_id,
+                    "session_id": sid,
+                }
+
+            if key.startswith("doc:"):
+                doc_id, _, idx = key[len("doc:"):].partition("#")
+                chunk_id = f"{doc_id}#{idx}" if idx else None
+                meta = conn.execute(
+                    "SELECT title, source_url FROM docs WHERE doc_id = ?",
+                    (doc_id,),
+                ).fetchone()
+                rows = [
+                    (r["chunk_id"], r["text"])
+                    for r in conn.execute(
+                        "SELECT chunk_id, text FROM doc_chunks WHERE doc_id = ? "
+                        "ORDER BY chunk_index, chunk_id",
+                        (doc_id,),
+                    ).fetchall()
+                ]
+                if not rows:
+                    return None
+                doc_text, spans = _chunk_spans(rows)
+                if chunk_id is None:
+                    start, end = 0, len(doc_text)
+                else:
+                    start, end = spans.get(chunk_id, (0, 0))
+                heading = ""
+                row = conn.execute(
+                    "SELECT heading_path FROM doc_chunks WHERE chunk_id = ?",
+                    (chunk_id,),
+                ).fetchone() if chunk_id else None
+                if row and row["heading_path"]:
+                    heading = row["heading_path"]
+                return {
+                    "kind": "doc",
+                    "title": (meta["title"] if meta else None) or heading or doc_id,
+                    "url": (meta["source_url"] if meta else None),
+                    "doc_text": doc_text,
+                    "start": start,
+                    "end": end,
+                    "chunk_id": chunk_id,
+                    "doc_id": doc_id,
+                }
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        logger.warning("excerpt lookup failed for %r", key, exc_info=True)
+        return None
+    return None
+
 
 def build_system_prompt() -> str:
     """Render the shipped prompt template with the catalog's session list.
@@ -1175,6 +2167,25 @@ class GFSImmersionHandler(SimpleHTTPRequestHandler):
                 self._send_json({"error": "not found"}, 404)
             return
 
+        if path == "/api/excerpt":
+            # Sprint 24: reconstruct the indexed text behind a citation key
+            # (``session:...::chunk_003`` / ``doc:<id>#0000``) so the UI can show
+            # the original with the cited chunk highlighted. Additive endpoint.
+            qs = parse_qs(parsed.query)
+            key = qs.get("key", [""])[0]
+            excerpt = get_excerpt(key)
+            if excerpt:
+                text, start, end = redact_internal_paths(
+                    excerpt.get("doc_text", "") or "",
+                    int(excerpt.get("start") or 0),
+                    int(excerpt.get("end") or 0),
+                )
+                excerpt["doc_text"], excerpt["start"], excerpt["end"] = text, start, end
+                self._send_json(excerpt)
+            else:
+                self._send_json({"error": "not found", "code": "excerpt_not_found"}, 404)
+            return
+
         if path == "/api/fact":
             # CMP2-04: expose the deterministic facts lookup implemented in
             # crawl.retrieve.get_fact(); it is deliberately NOT an RRF ranker.
@@ -1337,6 +2348,10 @@ class GFSImmersionHandler(SimpleHTTPRequestHandler):
             self._handle_feedback(client_ip)
             return
 
+        if path == "/api/fetch":
+            self._handle_fetch(client_ip)
+            return
+
         if path == "/api/telemetry":
             # Accept telemetry silently (anonymous, client-side)
             self._send_json({"ok": True})
@@ -1397,6 +2412,120 @@ class GFSImmersionHandler(SimpleHTTPRequestHandler):
             # validated here and never forwarded raw to the retrieval core.
             chat_scope = _resolve_chat_scope(body.get("scope"), user_message)
 
+            # Deterministic metadata path. Identity/listing questions (who
+            # presented, which sessions, when) are answerable ONLY from the
+            # session catalog: embedding similarity sits far from the chunk
+            # text for such phrasing and abstains even though the facts exist.
+            if _looks_like_session_fact_query(user_message):
+                fact_excerpts = _session_fact_excerpts(limit=4)
+                if fact_excerpts:
+                    self._send_json(
+                        {
+                            "excerpts": fact_excerpts,
+                            "sources": [
+                                {
+                                    "title": e["title"],
+                                    "url": e["url"],
+                                    "fusion_key": e["fusion_key"],
+                                }
+                                for e in fact_excerpts
+                            ],
+                            "system_prompt": build_chat_prompt(fact_excerpts),
+                            "answerable": True,
+                            "abstained": False,
+                            "abstention_reason": None,
+                            "top_score": 1.0,
+                            "min_score": 0.0,
+                            "mode": "catalog_fact",
+                            "prompt_version": PROMPT_VERSION,
+                            "source": "local_kb",
+                            "grounded": "local",
+                        }
+                    )
+                    return
+
+            # Sprint 21b: session SUMMARY intent ("what is the takeaway from
+            # session 04?"). Abstractive questions about a session sit far from
+            # every chunk in vector space (measured 0.85 against a 0.84 gate) even
+            # though the answer is the authored summary the card already shows.
+            # Answered from the catalog so a correctly-phrased question can never
+            # abstain for lack of a nearby vector.
+            if _is_session_summary_query(user_message):
+                summary_excerpts = _session_summary_excerpts(user_message, limit=8)
+                if summary_excerpts:
+                    self._send_json(
+                        {
+                            "excerpts": summary_excerpts,
+                            "sources": [
+                                {
+                                    "title": e["title"],
+                                    "url": e["url"],
+                                    "fusion_key": e["fusion_key"],
+                                }
+                                for e in summary_excerpts
+                            ],
+                            "system_prompt": build_chat_prompt(summary_excerpts),
+                            "answerable": True,
+                            "abstained": False,
+                            "abstention_reason": None,
+                            "top_score": 1.0,
+                            "min_score": 0.0,
+                            "mode": "catalog_summary",
+                            "prompt_version": PROMPT_VERSION,
+                            "source": "local_kb",
+                            "grounded": "local",
+                        }
+                    )
+                    return
+
+            # Sprint 21 / Part B: deterministic relevance gate. General-knowledge
+            # questions are answered politely with a redirect instead of being
+            # answered from unrelated cohort excerpts. This is a UX heuristic, not
+            # a security control, and it fails OPEN: an error here must never
+            # prevent a legitimate question from being answered (V-9b).
+            try:
+                relevance = classify_relevance(user_message)
+            except Exception:  # noqa: BLE001 - fail open by design
+                logger.warning(
+                    "relevance gate failed; proceeding to retrieval", exc_info=True
+                )
+                relevance = None
+
+            if relevance is not None and relevance.verdict == "out_of_scope":
+                self._send_json(
+                    {
+                        "error": "out_of_scope",
+                        "code": "out_of_scope",
+                        "relevance": "out_of_scope",
+                        "verification": "uncited",
+                        "message": redirect_message(relevance.topic_guess),
+                        "topic_guess": relevance.topic_guess,
+                        # Reuse the existing corpus-verified suggestion helper so the
+                        # payload shape matches every other /api/chat response, and every
+                        # offered question is proven answerable by the same retrieval gate.
+                        # The static list is the fallback when the DB is unavailable.
+                        "suggested_questions": (
+                            suggest_questions(limit=3)
+                            or [
+                                {"question": q}
+                                for q in relevance_suggested_questions()
+                            ]
+                        ),
+                        "excerpts": [],
+                        "sources": [],
+                        "answerable": True,
+                        "abstained": False,
+                        "abstention_reason": None,
+                        "top_score": 0.0,
+                        "min_score": 0.0,
+                        "mode": "out_of_scope",
+                        "prompt_version": PROMPT_VERSION,
+                        "source": "local_kb",
+                        "grounded": "local",
+                    }
+                )
+                return
+
             # FR-2: retrieve through the SAME core as /api/search, over the
             # full 392-doc + 80-session corpus. A fetch failure is reported as
             # a retrieval error, never papered over with an ungrounded answer.
@@ -1418,10 +2547,37 @@ class GFSImmersionHandler(SimpleHTTPRequestHandler):
 
             excerpts = _excerpts_from_results(payload["results"])
             sources = _sources_from_results(payload["results"])
+            answerable = bool(payload["answerable"])
+            # Sprint 21g: a question that NAMES a cohort framework must cover the
+            # framework's members, not merely the chunks nearest the wording.
+            # "explain the lenses from the 4th session" previously returned the
+            # framework intro plus Lens 1 and Lens 4, and the model correctly
+            # reported Lenses 2, 3 and 5 as absent -- even though all five lens
+            # chunks were indexed. The section supplies the whole set.
+            _anchor_excerpts_for_set = _anchor_excerpts(user_message, limit=2)
+            if _anchor_excerpts_for_set:
+                _seen_keys = {e["fusion_key"] for e in excerpts}
+                _missing = [
+                    e
+                    for e in _anchor_excerpts_for_set
+                    if e["fusion_key"] not in _seen_keys
+                ]
+                if _missing:
+                    excerpts = (_missing + excerpts)[:ANCHOR_MERGE_MAX_EXCERPTS]
+                    sources = [
+                        {
+                            "title": e["title"],
+                            "url": e["url"],
+                            "fusion_key": e["fusion_key"],
+                        }
+                        for e in excerpts
+                    ]
+                    answerable = True
             # FR-3 groundwork: every citation must resolve to a URL. A result
             # set with no resolvable URL cannot ground an answer.
-            answerable = bool(payload["answerable"] and sources)
+            answerable = bool(answerable and sources)
 
+            # Sprint 17: build the response payload before considering web ground.
             if not answerable:
                 # FR-2/D3: no evidence window means no prompt and no generation.
                 # A model asked to answer from weak retrieval will hallucinate.
@@ -1434,6 +2590,38 @@ class GFSImmersionHandler(SimpleHTTPRequestHandler):
                 # with why it was refused. Kept in its OWN top-level key -- it
                 # is never merged into excerpts/sources and its text never
                 # reaches system_prompt (which stays None).
+                # Sprint 21b: before abstaining, try an exact framework-anchor
+                # match. The table already maps cohort framework names to their
+                # defining chunk, it was simply never consulted, so identical
+                # questions succeeded or failed purely on embedding distance.
+                # A nonsense question matches no anchor and still abstains below.
+                anchor_excerpts = _anchor_excerpts(user_message, limit=2)
+                if anchor_excerpts:
+                    self._send_json(
+                        {
+                            "excerpts": anchor_excerpts,
+                            "sources": [
+                                {
+                                    "title": e["title"],
+                                    "url": e["url"],
+                                    "fusion_key": e["fusion_key"],
+                                }
+                                for e in anchor_excerpts
+                            ],
+                            "system_prompt": build_chat_prompt(anchor_excerpts),
+                            "answerable": True,
+                            "abstained": False,
+                            "abstention_reason": None,
+                            "top_score": payload["top_score"],
+                            "min_score": payload["min_score"],
+                            "mode": "anchor_lookup",
+                            "prompt_version": PROMPT_VERSION,
+                            "source": "local_kb",
+                            "grounded": "local",
+                        }
+                    )
+                    return
+
                 closest_material = _closest_material_from_results(
                     payload["results"], abstention_reason
                 )
@@ -1442,29 +2630,27 @@ class GFSImmersionHandler(SimpleHTTPRequestHandler):
                 suggested_questions = suggest_questions(
                     query=user_message, limit=3
                 )
-                self._send_json(
-                    {
-                        "excerpts": [],
-                        "sources": [],
-                        "system_prompt": None,
-                        "answerable": False,
-                        "abstained": True,
-                        "abstention_reason": abstention_reason,
-                        "closest_material": closest_material,
-                        "suggested_questions": suggested_questions,
-                        "top_score": payload["top_score"],
-                        "min_score": payload["min_score"],
-                        "mode": payload["mode"],
-                        "prompt_version": PROMPT_VERSION,
-                    }
-                )
-                return
-
-            # Sprint 11 / FR-1: retrieval + prompt only. There is no outbound
-            # call on this path — generation happens in the client, with the
-            # user's own credential, and comes back through /api/ground.
-            self._send_json(
-                {
+                response = {
+                    "excerpts": [],
+                    "sources": [],
+                    "system_prompt": None,
+                    "answerable": False,
+                    "abstained": True,
+                    "abstention_reason": abstention_reason,
+                    "closest_material": closest_material,
+                    "suggested_questions": suggested_questions,
+                    "top_score": payload["top_score"],
+                    "min_score": payload["min_score"],
+                    "mode": payload["mode"],
+                    "prompt_version": PROMPT_VERSION,
+                    "source": "local_kb",
+                    "grounded": "abstained",
+                }
+            else:
+                # Sprint 11 / FR-1: retrieval + prompt only. There is no outbound
+                # call on this path — generation happens in the client, with the
+                # user's own credential, and comes back through /api/ground.
+                response = {
                     "excerpts": excerpts,
                     "sources": sources,
                     "system_prompt": build_chat_prompt(excerpts),
@@ -1475,8 +2661,58 @@ class GFSImmersionHandler(SimpleHTTPRequestHandler):
                     "top_score": payload["top_score"],
                     "min_score": payload["min_score"],
                     "mode": payload["mode"],
+                    "source": "local_kb",
+                    "grounded": "local",
                 }
-            )
+
+            # Sprint 17: web-ground fallback (search + HTTPS fetch only; no LLM).
+            # Activated when local knowledge abstains OR when the caller explicitly
+            # requests live-web grounding.
+            if (
+                WEB_GROUND_ENABLED
+                and _check_and_record_web_ground(client_ip, now)
+                and (not answerable or body.get("live_web") is True)
+            ):
+                # V-16: truncate before egress; do not log the raw query text.
+                cse_query = _truncate_for_cse(user_message)
+                try:
+                    web_cfg = {
+                        "search_key": os.environ.get("GFS_SEARCH_API_KEY"),
+                        "engine_id": os.environ.get("GFS_SEARCH_ENGINE_ID"),
+                        "allowlist": WEB_GROUND_DOMAIN_ALLOWLIST,
+                        "max_results": WEB_GROUND_MAX_RESULTS,
+                        "max_bytes_per_page": WEB_GROUND_MAX_BYTES_PER_PAGE,
+                        "fetch_timeout_seconds": WEB_GROUND_FETCH_TIMEOUT_SECONDS,
+                        "fresh": query_requires_freshness(user_message),
+                    }
+                    web = retrieval.web_ground_fallback(cse_query, web_cfg)
+                    if web.get("ok"):
+                        # web_ground_fallback returns the prompt with the untrusted-content boundary.
+                        response = {
+                            "excerpts": web["excerpts"],
+                            "sources": web["sources"],
+                            "system_prompt": web["system_prompt"],
+                            "answerable": True,
+                            "abstained": False,
+                            "abstention_reason": None,
+                            "prompt_version": PROMPT_VERSION,
+                            "top_score": 0.0,
+                            "min_score": 0.0,
+                            "mode": "live_web",
+                            "source": "live_web",
+                            "grounded": "web",
+                            "web_meta": web.get("web_meta", {}),
+                        }
+                    else:
+                        # Preserve honest abstain; update reason if budget-related.
+                        if web.get("reason") == "live_web_budget_exhausted":
+                            response["abstention_reason"] = "live_web_budget_exhausted"
+                            response["grounded"] = "abstained"
+                except Exception:
+                    logger.exception("Web-ground fallback failed")
+                    # Fail closed to the existing honest abstain.
+
+            self._send_json(response)
 
         except Exception as e:
             self._send_json({"error": f"Chat error: {str(e)}"}, 500)
@@ -1559,6 +2795,84 @@ class GFSImmersionHandler(SimpleHTTPRequestHandler):
             self._send_json({"error": "grounding_failed"}, 500)
 
     # ── Feedback Handler ─────────────────────────────────────────
+
+    def _handle_fetch(self, client_ip: str):
+        """POST /api/fetch — fetch ONE allowlisted page and return its plain text.
+
+        Exists for the BYO live-web flow: the browser runs the search with the
+        user's own Google key (which never touches this origin), then asks us to
+        retrieve the body of a result page, because cloud.google.com and friends
+        send no CORS headers and the browser cannot read them directly.
+
+        What this endpoint never sees: the user's search credential or their
+        question. It receives only a URL from the server-side allowlist. Reuses
+        the Sprint 17 SSRF-guarded fetcher and the same per-IP/daily budget.
+        """
+        if not PAGE_FETCH_ENABLED:
+            self._send_json(
+                {
+                    "ok": False,
+                    "code": "fetch_disabled",
+                    "reason": "Page fetch is disabled on this deployment.",
+                },
+                503,
+            )
+            return
+
+        try:
+            length = self._content_length()
+            if length > MAX_REQUEST_BODY_BYTES:
+                self._send_json({"error": "request body too large"}, 413)
+                return
+            raw = self.rfile.read(length) if length else b"{}"
+            payload = json.loads(raw.decode("utf-8") or "{}")
+        except (ValueError, UnicodeDecodeError):
+            self._send_json({"error": "invalid json", "code": "bad_request"}, 400)
+            return
+
+        url = (payload.get("url") or "").strip()
+        if not url:
+            self._send_json({"error": "url required", "code": "url_required"}, 400)
+            return
+
+        now = time.monotonic()
+        if not _check_and_record_web_ground(client_ip, now):
+            self._send_json(
+                {
+                    "ok": False,
+                    "code": "budget_exhausted",
+                    "reason": "Live-web budget exhausted for this hour or today.",
+                },
+                429,
+            )
+            return
+
+        ok, text_or_reason, final_url = retrieval.fetch_page_text(
+            url,
+            WEB_GROUND_DOMAIN_ALLOWLIST,
+            max_bytes=WEB_GROUND_MAX_BYTES_PER_PAGE,
+            timeout_seconds=WEB_GROUND_FETCH_TIMEOUT_SECONDS,
+        )
+        if not ok:
+            self._send_json(
+                {
+                    "ok": False,
+                    "code": "fetch_failed",
+                    "reason": text_or_reason,
+                },
+                422,
+            )
+            return
+
+        snippets = retrieval._extract_snippets(text_or_reason, max_chars=400, max_total=6000)
+        self._send_json(
+            {
+                "ok": True,
+                "url": final_url or url,
+                "snippets": snippets[:12],
+                "attribution": {"source_url": final_url or url},
+            }
+        )
 
     def _handle_feedback(self, client_ip: str):
         try:
