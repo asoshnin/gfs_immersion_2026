@@ -21,8 +21,8 @@ A small, self-hosted web portal that:
   passage highlighted,
 - ships the **AI Venture Coach** (client-side five-lens self-assessment) and the **VC Readiness
   Scorecard** for founders working through session 04,
-- can fall back to live web search with your own Google key (`/api/search`) when the local corpus
-  has nothing relevant.
+- can fall back to **live web search** when the local corpus has nothing relevant — searched
+  directly from the browser, with an optional key of your own (see *Live web search* below).
 
 The retrieval core is a plain Python package (`crawl/`), so it can be embedded in other tools —
 see [`docs/MCP.md`](docs/MCP.md) for the bundled MCP server.
@@ -65,6 +65,35 @@ The assistant calls **your** LLM provider directly from the browser. Paste a pro
 key in the settings panel; the key is stored in `localStorage` only, is never sent to this server,
 and is never written back into the input field after saving. There is no server-side inference.
 
+Any OpenAI-compatible endpoint works (OpenAI, OpenRouter, Azure AI Foundry, a local server on
+loopback). One caveat worth knowing: **Azure AI Foundry and Azure OpenAI do not accept
+`Authorization: Bearer`** — they want an `api-key` header, and an Azure API Management gateway
+wants `Ocp-Apim-Subscription-Key`. All three return the same misleading
+`invalid subscription key or wrong API endpoint` 401, so the header cannot be inferred from the
+error. The app therefore tries the schemes in order on an auth failure (401/403 only, so a retry
+never double-bills tokens), remembers the one that worked, and exposes a manual override under
+*Settings → Auth header*.
+
+## Live web search
+
+The optional live-web fallback uses [Keenable](https://keenable.ai) (`api.keenable.ai`), queried
+directly from the browser — same BYO model as the LLM key, so your search key never reaches this
+server.
+
+- **No key needed to try it.** Keenable answers keyless on a shared public tier (1,000 requests/hour
+  per IP), so the fallback works before you configure anything.
+- **A key raises your limits** (10 requests/second, no hourly cap). Create one at
+  <https://app.keenable.ai/console/api-keys>; it starts with `keen_`. There is no second identifier
+  to configure — no engine ID, no Cloud project.
+- **Settings → Test credentials** runs one real query and reports exactly what the provider said, so
+  a failure names its own cause instead of failing silently.
+
+Answers drawn from the web are always labelled unverified, carry their source URLs, and are wrapped
+in an explicit untrusted-content boundary before reaching a model.
+
+> This replaced Google Custom Search JSON API, which is closed to new Google Cloud projects and is
+> retired for existing customers on 1 January 2027.
+
 ## Data
 
 The searchable corpus is **not committed**. The SQLite index is built locally from public
@@ -80,6 +109,9 @@ an empty index — it still serves its static content and the assistant abstains
 serve.py            HTTP server: static site + /api/* (retrieval, grounding, feedback)
 mcp_server.py       MCP (stdio) tools for agent clients (no key, retrieval-only)
 site/               the portal (index.html, compiled.css, methodology/ artefacts, assets/)
+                      assets/provider-websearch.js  BYO Keenable search (browser-side)
+                      assets/provider-config.js     provider-adaptive params + auth schemes
+                      assets/settings-modal.js      the single shared credentials UI
 docs/               EXAMPLES.md, MCP.md + screenshots + the key-free static demo
 crawl/              vendored retrieval core (BM25 + dense, RRF fusion)
 prompts/            the assistant system prompt
