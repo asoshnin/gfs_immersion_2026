@@ -12,11 +12,40 @@ An **unofficial** companion hub for the Google for Startups Immersion EMEA 2026 
 
 A small, self-hosted web portal that:
 
-- summarises the four immersion sessions,
+- summarises the four immersion sessions and lets you search the whole cohort knowledge base
+  (session syntheses + bundled Google Cloud documentation),
 - bundles the methodology artefacts (ADK recipes, scripts, checklists),
 - runs a **bring-your-own-key** assistant that answers questions using the visitor's own LLM
   provider key (the key never leaves the browser),
-- exposes the same retrieval core over MCP (stdio) for local use.
+- makes every claim **clickable**: each citation opens the original indexed text with the cited
+  passage highlighted,
+- ships the **AI Venture Coach** (client-side five-lens self-assessment) and the **VC Readiness
+  Scorecard** for founders working through session 04,
+- can fall back to live web search with your own Google key (`/api/search`) when the local corpus
+  has nothing relevant.
+
+The retrieval core is a plain Python package (`crawl/`), so it can be embedded in other tools —
+see [`docs/MCP.md`](docs/MCP.md) for the bundled MCP server.
+
+## Use it from an agent (MCP)
+
+`mcp_server.py` exposes the knowledge base as MCP tools for any agent client:
+
+```bash
+pip install -r requirements-mcp.txt
+python mcp_server.py --selftest     # list the tools
+```
+
+Retrieval-only (no key, nothing billed), local stdio (no hosting), and no local index needed.
+Tools: `list_sessions`, `search_immersion_knowledge`, `get_excerpt`, `get_adk_topology_recipe`.
+Full setup and client configs: [`docs/MCP.md`](docs/MCP.md).
+
+## See it without a key
+
+Want to know what it looks like before configuring anything? See
+[`docs/EXAMPLES.md`](docs/EXAMPLES.md) for screenshots, and open the static, self-contained
+[`docs/demo/answer-example.html`](docs/demo/answer-example.html) — a frozen grounded answer whose
+citations open with the cited chunk highlighted. No API key and no server required.
 
 ## Run it locally
 
@@ -49,12 +78,15 @@ an empty index — it still serves its static content and the assistant abstains
 
 ```
 serve.py            HTTP server: static site + /api/* (retrieval, grounding, feedback)
+mcp_server.py       MCP (stdio) tools for agent clients (no key, retrieval-only)
 site/               the portal (index.html, compiled.css, methodology/ artefacts, assets/)
+docs/               EXAMPLES.md, MCP.md + screenshots + the key-free static demo
 crawl/              vendored retrieval core (BM25 + dense, RRF fusion)
 prompts/            the assistant system prompt
 scripts/            local + Cloud Run deploy helpers
 data/               catalog.json (committed); SQLite index (not committed)
 requirements.txt
+requirements-mcp.txt
 Dockerfile
 firebase.json       Firebase Hosting rewrite of /api/** to the Cloud Run service
 ```
